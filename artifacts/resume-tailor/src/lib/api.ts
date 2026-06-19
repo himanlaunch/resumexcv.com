@@ -456,6 +456,34 @@ export async function scrapeJobDescription(
   }
 }
 
+// ── Gap Experience Suggestion ─────────────────────────────────────────────────
+
+export interface GapSuggestion {
+  title: string;
+  company: string;
+  period: string;
+  bullets: string[];
+}
+
+export async function suggestGapExperience(
+  resume: ResumeData,
+  gapStart: string,
+  gapEnd: string,
+  durationMonths: number
+): Promise<GapSuggestion> {
+  const res = await fetch(`${API_BASE}/resume/suggest-gap-experience`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ resume, gapStart, gapEnd, durationMonths }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? "Failed to generate gap suggestion");
+  }
+  const data = await res.json() as { suggestion: GapSuggestion };
+  return data.suggestion;
+}
+
 // ── Cover letter (SSE streaming) ──────────────────────────────────────────────
 
 export async function generateCoverLetter(

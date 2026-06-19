@@ -510,6 +510,80 @@ router.post("/ats-check", async (req, res) => {
   }
 });
 
+// POST /api/resume/suggest-gap-experience
+// Body: { resume: ResumeRecord, gapStart: string, gapEnd: string, durationMonths: number }
+router.post("/suggest-gap-experience", async (req, res) => {
+  const { resume, gapStart, gapEnd, durationMonths } = req.body as {
+    resume: ResumeRecord;
+    gapStart: string;
+    gapEnd: string;
+    durationMonths: number;
+  };
+
+  if (!resume || !gapStart || !gapEnd) {
+    return res.status(400).json({ error: "resume, gapStart, and gapEnd are required" });
+  }
+
+  const careerContext = [
+    resume.summary ? `Summary: ${resume.summary.slice(0, 300)}` : "",
+    `Roles: ${(resume.experience ?? []).slice(0, 3).map(e => `${e.title} at ${e.company} (${e.period})`).join("; ")}`,
+    `Skills: ${(resume.skills ?? []).slice(0, 15).join(", ")}`,
+  ].filter(Boolean).join("\n");
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: DEPLOYMENT,
+      max_completion_tokens: 512,
+      messages: [
+        {
+          role: "system",
+          content: `You help professionals recall activities they may have forgotten to include on their resume.
+Given a gap period, suggest plausible activities this person might have done (freelance work, online courses, certifications, open-source projects, caregiving, side business, travel, etc.).
+The user will review these proposals and confirm or reject them — they are memory prompts, not fabrications.
+Return ONLY valid JSON. No markdown fences. No commentary.`,
+        },
+        {
+          role: "user",
+          content: `This professional has a ${durationMonths}-month gap in their resume from ${gapStart} to ${gapEnd}.
+
+Career context:
+${careerContext}
+
+Suggest 2–3 plausible activities they may have done during this gap.
+Return JSON with exactly this shape:
+{
+  "title": "<honest label e.g. 'Freelance Consulting' or 'Independent Projects & Learning'>",
+  "company": "<context e.g. 'Self-Employed' or 'Independent'>",
+  "period": "${gapStart} – ${gapEnd}",
+  "bullets": ["<plausible activity 1>", "<plausible activity 2>", "<plausible activity 3>"]
+}
+
+Rules:
+- Bullets must be plausible for someone with their background but general enough to be honest
+- Do NOT claim specific companies, clients, or metrics not in the resume
+- Use action verbs; keep bullets concise and resume-ready
+- Title should be neutral and honest (e.g. "Career Development", "Freelance Projects", "Independent Consulting")`,
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const text = completion.choices[0]?.message?.content ?? "{}";
+    const raw = JSON.parse(text) as { title?: string; company?: string; period?: string; bullets?: string[] };
+    return res.json({
+      suggestion: {
+        title: sanitizeResumeText(raw.title ?? "Independent Work"),
+        company: sanitizeResumeText(raw.company ?? "Self-Employed"),
+        period: sanitizeResumeText(raw.period ?? `${gapStart} – ${gapEnd}`),
+        bullets: (raw.bullets ?? []).map(sanitizeResumeText).filter(Boolean),
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "Suggest gap experience error");
+    return res.status(500).json({ error: "Failed to generate gap suggestion" });
+  }
+});
+
 // POST /api/resume/retry-change
 // Body: { resume: ResumeData, job: JobData, change: DiffRow }
 router.post("/retry-change", async (req, res) => {

@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { BrandLogo } from "@/components/BrandLogo";
+import { GapSuggestionPanel } from "@/components/GapSuggestionPanel";
 import { upsertCampaignFromJob } from "@/lib/campaigns";
 import { sanitizeDiffChange, sanitizeResumeForExport, sanitizeResumeSkillText, sanitizeResumeText } from "@/lib/resumeSafety";
 
@@ -737,7 +738,7 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
   );
 }
 
-function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, onParsed, onClear, onDeleteVersion, onNext, onDirectJobs }: {
+function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, onParsed, onClear, onDeleteVersion, onNext, onDirectJobs, onUpdateResume }: {
   resume: ResumeData;
   savedData: SavedResumeData | null;
   savedVersions: SavedVersion[];
@@ -748,6 +749,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
   onDeleteVersion: (id: string) => void;
   onNext: (titles: string[], locations: string[]) => void;
   onDirectJobs: (jobs: JobResult[]) => void;
+  onUpdateResume: (r: ResumeData) => void;
 }) {
   const [uploaded, setUploaded] = useState(savedData !== null);
   const [loading, setLoading] = useState(false);
@@ -1087,6 +1089,16 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                 </div>
               ))}
             </div>
+            <GapSuggestionPanel
+              resume={resume}
+              onAddExperience={(entry) => {
+                const updated = {
+                  ...resume,
+                  experience: [entry, ...(resume.experience ?? [])],
+                };
+                onUpdateResume(updated);
+              }}
+            />
           </div>
         )}
 
@@ -3643,6 +3655,16 @@ export default function AppWorkspace() {
     if (user) void saveProfile(data).catch(() => {});
   };
 
+  const handleUpdateResume = (r: ResumeData) => {
+    setResume(r);
+    if (savedData) {
+      const data = { ...savedData, resume: r };
+      setSavedData(data);
+      persistResume(data, storageScope);
+      if (user) void saveProfile(data).catch(() => {});
+    }
+  };
+
   const handleClear = () => {
     clearPersistedResume(storageScope);
     setSavedData(null);
@@ -3696,7 +3718,7 @@ export default function AppWorkspace() {
       <Sidebar step={step} setStep={setStep} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} />
       <main className="flex-1 min-h-screen overflow-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
         {step === 1 && (
-          <Step1Vault key={savedData?.fileName ?? user?.id ?? "local-vault"} resume={resume} savedData={savedData} savedVersions={savedVersions} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} onParsed={handleParsed} onClear={handleClear} onDeleteVersion={handleDeleteVersion} onDirectJobs={(jobs) => { void handleJobsReady(jobs); }} onNext={(titles, locations) => {
+          <Step1Vault key={savedData?.fileName ?? user?.id ?? "local-vault"} resume={resume} savedData={savedData} savedVersions={savedVersions} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} onParsed={handleParsed} onClear={handleClear} onDeleteVersion={handleDeleteVersion} onDirectJobs={(jobs) => { void handleJobsReady(jobs); }} onUpdateResume={handleUpdateResume} onNext={(titles, locations) => {
             setSearchTitles(titles);
             setSearchLocations(locations);
             setDiscoverySearchRun(n => n + 1);
