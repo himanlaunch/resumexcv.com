@@ -2496,7 +2496,9 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
   };
 
   for (const row of rows) {
-    if (row.status !== "rewritten" || !row.confirmed) continue;
+    // Apply all rewritten rows: AI auto-rewrites (confirmed=undefined) and user-accepted confirm rows (confirmed=true).
+    // Rejected rows become status="kept" and are correctly skipped. Unreviewed confirm rows remain status="confirm".
+    if (row.status !== "rewritten") continue;
     const rawText = (row.customText ?? row.proposed).trim();
     const finalText = sanitizeResumeText(rawText);
     if (!finalText) continue;
@@ -3135,9 +3137,12 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
 
   useEffect(() => {
     selectedJobs.forEach(job => {
-      if (autoSavedJobIds.current.has(job.id)) return;
       const changes = jobDiffs[job.id] ?? [];
       if (changes.length === 0) return;
+      // Only auto-save once all pending confirm rows have been reviewed
+      const pendingCount = changes.filter(r => r.status === "confirm" && !r.confirmed).length;
+      if (pendingCount > 0) return;
+      if (autoSavedJobIds.current.has(job.id)) return;
       autoSavedJobIds.current.add(job.id);
       const version: SavedVersion = {
         id: `generated-${job.id}-${Date.now()}`,
@@ -3277,7 +3282,7 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
             const color = companyColor(job.company);
             const tailored = tailoredResumes[job.id];
             const rows = jobDiffs[job.id] ?? [];
-            const changedCount = rows.filter(r => r.status === "rewritten" && r.confirmed).length;
+            const changedCount = rows.filter(r => r.status === "rewritten").length;
             return (
               <div key={job.id} className="card-base rounded-2xl overflow-hidden">
                 <div className="p-4 md:p-5">
