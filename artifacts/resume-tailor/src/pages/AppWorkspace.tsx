@@ -1407,11 +1407,15 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
   const nextCursor = useRef<string | null>(null);
   const didFetch = useRef(false);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   // Track which dateFilter the current jobs were fetched with, so Load More is consistent
   const activeServerFilter = useRef<string | undefined>(undefined);
 
-  const doFetch = useCallback(async (start: number, append: boolean, dateFilter?: string) => {
+  const doFetch = useCallback(async (start: number, append: boolean, dateFilter?: string, platforms?: string[]) => {
     if (!append) {
+      // Cancel any in-flight request before starting a fresh search
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
       setStatus("loading");
       setLoadMoreError(null);
       nextCursor.current = null;
@@ -1421,7 +1425,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
       const result = await searchJobs(
         titles,
         location,
-        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: 10 },
+        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: 10, platforms },
         !append ? (job) => setJobs(prev => [...prev, job]) : undefined
       );
       if (append) {
@@ -1459,7 +1463,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
     // Server filter changed: reset pagination and fetch fresh
     nextStart.current = 0;
     nextCursor.current = null;
-    doFetch(0, false, newServerFilter);
+    doFetch(0, false, newServerFilter, [...activePlatforms]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeFilter]); // intentionally exclude doFetch — its stable identity breaks the guard
 
@@ -1467,10 +1471,10 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
     if (!hasMore || loadingMore || status === "loading") return false;
     setLoadingMore(true);
     setLoadMoreError(null);
-    await doFetch(nextStart.current, true, activeServerFilter.current);
+    await doFetch(nextStart.current, true, activeServerFilter.current, [...activePlatforms]);
     setLoadingMore(false);
     return true;
-  }, [doFetch, hasMore, loadingMore, status]);
+  }, [doFetch, hasMore, loadingMore, status, activePlatforms]);
 
   const handleSearch = async () => {
     didFetch.current = true;
@@ -1478,7 +1482,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
     nextCursor.current = null;
     setSelected(new Set());
     setCurrentPage(1);
-    await doFetch(0, false, getServerDateFilter(timeFilter));
+    await doFetch(0, false, getServerDateFilter(timeFilter), [...activePlatforms]);
   };
 
   useEffect(() => {
@@ -3750,7 +3754,7 @@ export default function AppWorkspace() {
           }} />
         )}
         {step === 3 && (
-          <Step3Discovery titles={searchTitles} location={searchLocations.join(", ")} resume={resume} autoSearchRun={discoverySearchRun}
+          <Step3Discovery titles={searchTitles} location={searchLocations.join("|")} resume={resume} autoSearchRun={discoverySearchRun}
             onNext={(jobs) => { void handleJobsReady(jobs); }} />
         )}
         {step === 4 && (

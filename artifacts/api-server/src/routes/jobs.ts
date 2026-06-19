@@ -134,15 +134,15 @@ router.get("/search", async (req, res) => {
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean)
-    .slice(0, 4);
+    .slice(0, 5);
 
   if (titles.length === 0) {
     return res.status(400).json({ error: "At least one job title required" });
   }
 
-  // Parse comma-separated locations
+  // Parse pipe-separated locations (pipe is used to avoid breaking "City, State" values)
   const locationTokens = locationParam
-    .split(",")
+    .split("|")
     .map((l) => l.trim())
     .filter(Boolean);
 
@@ -154,7 +154,7 @@ router.get("/search", async (req, res) => {
     .filter((l) => !/^remote|^hybrid/i.test(l))
     .map((l) => l.replace(/\(.*?\)/g, "").trim())
     .filter(Boolean)
-    .slice(0, 2); // max 2 city searches to protect SerpAPI quota
+    .slice(0, 3); // max 3 city searches (matches UI maxLocations)
 
   // If only remote options were selected, use "United States" as geographic base
   const searchCities = cityTokens.length > 0 ? cityTokens : ["United States"];
