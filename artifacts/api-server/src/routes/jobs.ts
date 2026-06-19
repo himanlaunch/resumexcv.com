@@ -264,6 +264,63 @@ router.get("/search", async (req, res) => {
   }
 });
 
+// GET /api/jobs/autocomplete?q=<query>&type=role|location
+// Returns SerpAPI Google Autocomplete suggestions for job roles or locations.
+router.get("/autocomplete", async (req, res) => {
+  const q = String(req.query.q ?? "").trim();
+  const type = String(req.query.type ?? "role"); // "role" | "location"
+
+  if (!q || q.length < 2) return res.json({ suggestions: [] });
+
+  if (!SERPAPI_KEY) {
+    return res.json({ suggestions: [] });
+  }
+
+  try {
+    const searchQuery = type === "location" ? q : q;
+    const params = new URLSearchParams({
+      engine: "google_autocomplete",
+      q: searchQuery,
+      gl: "us",
+      hl: "en",
+      api_key: SERPAPI_KEY,
+    });
+
+    const r = await fetch(`https://serpapi.com/search?${params}`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) return res.json({ suggestions: [] });
+
+    const data = (await r.json()) as { suggestions?: { value: string; type?: string }[] };
+    const raw = data.suggestions ?? [];
+
+    let suggestions: string[];
+    if (type === "location") {
+      suggestions = raw
+        .map(s => s.value)
+        // Keep suggestions that look like geographic locations (contain comma, or known remote/hybrid terms)
+        .filter(s => /,/.test(s) || /\b(remote|hybrid)\b/i.test(s))
+        .map(s => s.replace(/\s+jobs?.*$/i, "").trim())
+        .filter((s, i, arr) => s.length > 2 && arr.indexOf(s) === i)
+        .slice(0, 6);
+    } else {
+      suggestions = raw
+        .map(s =>
+          s.value
+            .replace(/\s+(jobs?|openings?|careers?|salary|listings?|positions?|hiring|near me|description|resume).*$/i, "")
+            .trim()
+        )
+        .filter((s, i, arr) => s.length > 2 && s.length < 80 && arr.indexOf(s) === i)
+        .slice(0, 8);
+    }
+
+    return res.json({ suggestions });
+  } catch (err) {
+    logger.error({ err }, "Autocomplete error");
+    return res.json({ suggestions: [] });
+  }
+});
+
 // GET /api/jobs/scrape?url=<job_url>
 // Scrapes a job posting page for full description
 router.get("/scrape", async (req, res) => {

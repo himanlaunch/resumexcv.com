@@ -16,6 +16,7 @@ import {
   getBillingPrices, getCreditBalance, createCheckout,
   getSavedProfile, saveProfile, clearSavedProfile,
   getGeneratedResumes, saveGeneratedResume, deleteGeneratedResume,
+  autocompleteRole, autocompleteLocation,
   type ParsedResumeResult, type CreditBalance, type PricingPlan,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -461,19 +462,45 @@ function LocationPicker({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [apiSuggestions, setApiSuggestions] = useState<string[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = useMemo(() =>
+  // Debounced SerpAPI autocomplete fetch
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!query || query.length < 2) { setApiSuggestions([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setApiLoading(true);
+      const results = await autocompleteLocation(query);
+      setApiSuggestions(results);
+      setApiLoading(false);
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query]);
+
+  const staticFiltered = useMemo(() =>
     LOCATION_SUGGESTIONS
       .filter((l) => !selected.includes(l.label) && l.label.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 8),
+      .slice(0, 5),
     [query, selected]
   );
 
+  // Merge static + API results, deduplicate by lower label
+  const filtered = useMemo(() => {
+    const staticLabels = new Set(staticFiltered.map(l => l.label.toLowerCase()));
+    const apiItems = apiSuggestions
+      .filter(s => !selected.includes(s) && !staticLabels.has(s.toLowerCase()))
+      .slice(0, 5)
+      .map(s => ({ label: s, icon: "📍" }));
+    return [...staticFiltered, ...apiItems];
+  }, [staticFiltered, apiSuggestions, selected]);
+
   const hasCustomQuery =
     query.trim().length > 0 &&
-    !LOCATION_SUGGESTIONS.some((s) => s.label.toLowerCase() === query.trim().toLowerCase()) &&
+    !filtered.some((s) => s.label.toLowerCase() === query.trim().toLowerCase()) &&
     !selected.includes(query.trim());
 
   const add = (label: string) => {
@@ -564,7 +591,7 @@ function LocationPicker({
           </div>
 
           {/* Dropdown */}
-          {open && (filtered.length > 0 || hasCustomQuery) && (
+          {open && (filtered.length > 0 || hasCustomQuery || apiLoading) && (
             <div
               className="absolute z-20 w-full mt-1 rounded-xl shadow-lg overflow-hidden"
               style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}
@@ -582,6 +609,12 @@ function LocationPicker({
                   <span>{label}</span>
                 </button>
               ))}
+              {apiLoading && filtered.length === 0 && (
+                <div className="flex items-center gap-2 px-4 py-3 text-sm" style={{ color: "#999" }}>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Searching…
+                </div>
+              )}
               {hasCustomQuery && (
                 <button
                   onMouseDown={(e) => { e.preventDefault(); add(query.trim()); }}
@@ -826,13 +859,35 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     ];
     return Array.from(new Set(titles));
   }, [recommendations.titles]);
+  const [roleApiSuggestions, setRoleApiSuggestions] = useState<string[]>([]);
+  const [roleApiLoading, setRoleApiLoading] = useState(false);
+  const roleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (roleDebounceRef.current) clearTimeout(roleDebounceRef.current);
+    const q = customTitleInput.trim();
+    if (!q || q.length < 2) { setRoleApiSuggestions([]); return; }
+    roleDebounceRef.current = setTimeout(async () => {
+      setRoleApiLoading(true);
+      const results = await autocompleteRole(q);
+      setRoleApiSuggestions(results);
+      setRoleApiLoading(false);
+    }, 400);
+    return () => { if (roleDebounceRef.current) clearTimeout(roleDebounceRef.current); };
+  }, [customTitleInput]);
+
   const roleSuggestions = useMemo(() => {
     const q = customTitleInput.trim().toLowerCase();
-    if (!q) return allRoleSuggestions.filter(title => !selectedTitles.has(title)).slice(0, 8);
-    return allRoleSuggestions
-      .filter(title => !selectedTitles.has(title) && title.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [allRoleSuggestions, customTitleInput, selectedTitles]);
+    const staticMatches = q
+      ? allRoleSuggestions.filter(title => !selectedTitles.has(title) && title.toLowerCase().includes(q)).slice(0, 5)
+      : allRoleSuggestions.filter(title => !selectedTitles.has(title)).slice(0, 8);
+    if (!q) return staticMatches;
+    const staticSet = new Set(staticMatches.map(t => t.toLowerCase()));
+    const apiItems = roleApiSuggestions
+      .filter(t => !selectedTitles.has(t) && !staticSet.has(t.toLowerCase()))
+      .slice(0, 4);
+    return [...staticMatches, ...apiItems];
+  }, [allRoleSuggestions, customTitleInput, selectedTitles, roleApiSuggestions]);
   const addRoleSuggestion = (title: string) => {
     setSelectedTitles(prev => new Set(prev).add(title));
     setCustomTitleInput("");
@@ -1012,6 +1067,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                           }
                         }}
                       />
+                      {roleApiLoading && <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />}
                       </div>
                       {roleSuggestionsOpen && (roleSuggestions.length > 0 || customTitleInput.trim()) && (
                         <div className="absolute z-20 w-full mt-1 rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}>
