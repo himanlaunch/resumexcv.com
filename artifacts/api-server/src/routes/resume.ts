@@ -206,7 +206,11 @@ function sanitizeTailoringResult(result: TailoringResult): TailoringResult {
         const proposed = change.section?.toLowerCase().includes("skill")
           ? sanitizeResumeSkillText(change.proposed)
           : sanitizeResumeText(change.proposed);
-        return { ...change, proposed };
+        // Gap rows must always be "confirm" so the user can Accept/Retry/Reject them
+        const status = change.gapType && change.gapType !== null && change.status !== "confirm"
+          ? "confirm"
+          : change.status;
+        return { ...change, proposed, status };
       })
       .filter((change) => change.proposed || change.status !== "rewritten"),
   };

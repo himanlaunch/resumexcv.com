@@ -2089,8 +2089,11 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
 
   const handleConfirm = (rowId: string, accept: boolean) => {
     const row = rows.find(r => r.id === rowId);
-    const hasSafeProposal = !!(row?.customText ?? row?.proposed ?? "").trim();
-    updateRow(activeJobId, rowId, { confirmed: true, status: accept && hasSafeProposal ? "rewritten" : "kept" });
+    if (!row) return;
+    // Consider proposed safe if the row has any proposed text, or if user clicked Reject (always "kept")
+    const hasSafeProposal = !!(row.customText ?? row.proposed ?? "").trim();
+    const newStatus: DiffChange["status"] = accept && hasSafeProposal ? "rewritten" : "kept";
+    updateRow(activeJobId, rowId, { confirmed: true, status: newStatus });
   };
 
   const handleConfirmAll = (accept: boolean) => {
