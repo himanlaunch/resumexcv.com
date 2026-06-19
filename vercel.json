@@ -1,0 +1,24 @@
+{
+  "buildCommand": "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/resume-tailor run build",
+  "outputDirectory": "artifacts/resume-tailor/dist/public",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "framework": "vite",
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/[...path].js"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/[...path].js": {
+      "maxDuration": 300
+    }
+  }
+}

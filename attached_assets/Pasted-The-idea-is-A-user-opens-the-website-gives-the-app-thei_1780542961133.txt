@@ -1,0 +1,126 @@
+The idea is:
+
+A user opens the website, gives the app their resume, tells it what jobs they want, the app finds matching live jobs, lets the user choose which jobs matter, then customizes the resume for each selected job and exports clean resume files.
+
+**User Flow**
+1. User opens the app  
+They land on the main tailoring workspace.
+
+2. User uploads resume  
+They upload a `.docx`, `.pdf`, or `.txt` resume.
+
+The app extracts the resume text and parses it into:
+- contact
+- summary
+- skills
+- work experience
+- projects
+- education
+- certifications
+
+3. User searches jobs  
+The user enters job titles like:
+
+```text
+AI Software Engineer
+Data Product Manager
+Lead AI Engineer
+```
+
+They also enter a location, for example:
+
+```text
+United States
+San Francisco, CA
+O'Fallon, MO
+```
+
+4. App fetches live jobs  
+The app uses SerpApi Google Jobs to fetch live job postings from the internet.
+
+Each job result is converted into a structured job profile:
+- title
+- company
+- location
+- job description
+- keywords
+- responsibilities
+- apply/source link
+
+5. Jobs stream into dashboard  
+As jobs are found, they appear as cards in the dashboard.
+
+The user can select or remove jobs.
+
+6. User chooses jobs  
+Only selected jobs are used for resume customization.
+
+Example:
+- Select Wells Fargo AI Engineer
+- Select Perplexity AI Software Engineer
+- Ignore irrelevant jobs
+
+7. App tailors resume  
+For every selected job, the app compares:
+
+Resume profile  
+against  
+Job profile
+
+It looks for:
+- matching skills
+- missing skills
+- responsibilities from the job
+- keywords
+- seniority signals
+- domain terms
+
+Then it creates a tailored draft.
+
+8. Review screen  
+The user sees proposed resume changes.
+
+Each change is labeled:
+- `Rewritten`
+- `Kept`
+- `Needs confirmation`
+
+If something is not clearly supported by the uploaded resume, it is marked **Needs confirmation**.
+
+9. User confirms or rejects  
+The app blocks export until all confirmation-required items are handled.
+
+This prevents silent fake experience from being exported.
+
+10. Export  
+After confirmation, the user exports:
+- `.docx`
+- `.pdf`
+- `.zip` if multiple resumes/jobs exist
+
+**Backend Idea**
+The backend has several jobs:
+
+- Resume parser: reads uploaded resume files.
+- Job discovery: fetches live jobs using SerpApi.
+- Job extractor: turns job data into structured job profiles.
+- Tailoring engine: uses LLM/fallback logic to rewrite resume content.
+- Review gate: prevents unconfirmed unsupported additions.
+- Exporter: generates ATS-friendly DOCX/PDF files.
+- Batch store: keeps a batch ID so review/export pages can reload the work.
+
+**Business Idea**
+Instead of manually editing a resume for every job, the user can:
+
+1. Upload resume once.
+2. Search many jobs.
+3. Select the best jobs.
+4. Generate job-specific resumes.
+5. Review changes.
+6. Export ready-to-submit files.
+
+So the app is basically:
+
+**Job discovery + resume analysis + AI tailoring + human review + resume export.**
+
+The most important principle is that the app should not blindly invent facts. It can suggest stronger job-aligned wording, but anything unsupported should require user confirmation before export.
