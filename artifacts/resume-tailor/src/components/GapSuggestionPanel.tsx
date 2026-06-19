@@ -89,12 +89,10 @@ function detectGaps(experience: ResumeData["experience"]): DetectedGap[] {
   const now = new Date();
 
   for (let i = 0; i < parsed.length - 1; i++) {
-    const laterEnd = parsed[i].end ?? now;
-    const earlierStart = parsed[i + 1].start;
-    // Gap is between the end of the later job and the start of the earlier job
-    // (they are sorted most-recent first, so parsed[i] is later, parsed[i+1] is earlier)
-    const gapStart = earlierStart;
-    const gapEnd = laterEnd;
+    // parsed[i] is more recent, parsed[i+1] is earlier (sorted descending)
+    // The gap is between the END of parsed[i+1] and the START of parsed[i]
+    const gapStart = parsed[i + 1].end ?? parsed[i + 1].start;
+    const gapEnd = parsed[i].start;
 
     // Only count if gapEnd is actually after gapStart and the gap is >3 months
     if (gapEnd > gapStart) {
@@ -140,10 +138,13 @@ export function GapSuggestionPanel({ resume, onAddExperience }: Props) {
   }, []); // run once on mount
 
   const fetchSuggestion = useCallback(async (index: number) => {
-    setGapStates(prev =>
-      prev.map((s, i) => i === index ? { ...s, status: "loading", error: null } : s)
-    );
-    const gap = gapStates[index]?.gap ?? detectGaps(resume.experience)[index];
+    setGapStates(prev => {
+      const state = prev[index];
+      if (!state) return prev;
+      return prev.map((s, i) => i === index ? { ...s, status: "loading", error: null } : s);
+    });
+    // Read gap from state updater to avoid stale closure — pull it from the ref snapshot
+    const gap = gapStates[index]?.gap;
     if (!gap) return;
     try {
       const suggestion = await suggestGapExperience(

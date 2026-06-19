@@ -705,7 +705,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   "changes": [
     {
       "id": "<unique string>",
-      "section": "<section name>",
+      "section": "<section name — use exact format: 'Summary', 'Skills', 'Education', 'Certifications', or 'Experience - <Company Name>' for experience bullets>",
       "original": "<original text from resume or '[Not in resume]'>",
       "jobReq": "<specific requirement from job description this addresses>",
       "proposed": "<final resume-ready rewrite only; no notes, reasoning, caveats, or instructions>",
@@ -745,32 +745,40 @@ Produce ONLY the JSON object. No markdown fences. No extra commentary.`;
 }
 
 async function runATSCheck(resume: ResumeRecord, changes: DiffChange[]): Promise<ATSCheck[]> {
+  const skillsSample = (resume.skills ?? []).slice(0, 20).join(", ");
+  const bulletsSample = (resume.experience ?? [])
+    .flatMap(e => (e.bullets ?? []).slice(0, 3))
+    .slice(0, 12)
+    .join(" | ");
+  const periods = (resume.experience ?? []).map(e => e.period ?? "").filter(Boolean).join(", ");
+  const summary = (resume.summary ?? "").slice(0, 300);
+  const rolesWithBullets = (resume.experience ?? []).filter(e => e.bullets && e.bullets.length > 0).length;
+  const allRoles = resume.experience?.length ?? 0;
+
   const completion = await openai.chat.completions.create({
     model: DEPLOYMENT,
-    max_completion_tokens: 800,
+    max_completion_tokens: 900,
     messages: [
       {
         role: "system",
-        content: `You are an ATS (Applicant Tracking System) formatting expert.
-Analyse the resume structure and return ONLY a JSON array of check objects.
-Each check: { "ok": boolean, "category": string, "label": string, "detail": string }
-Focus on REAL formatting issues — no fake ATS scores.`,
+        content: `You are an ATS (Applicant Tracking System) compliance expert.
+Return ONLY a JSON object with a "checks" array. Each check: { "ok": boolean, "category": string, "label": string, "detail": string }.
+Be specific — reference actual content from the resume, not generic advice.`,
       },
       {
         role: "user",
-        content: `Check this resume for ATS compliance:
+        content: `Audit this resume for ATS compliance. Return {"checks": [...]}.
 
-Name: ${resume.contact?.name ?? ""}
-Has email: ${!!resume.contact?.email}
-Has location: ${!!resume.contact?.location}
-Has LinkedIn: ${!!resume.contact?.linkedin}
-Section headers present: Summary, Skills, Experience, Education, Certifications
-Number of experience roles: ${resume.experience?.length ?? 0}
-Uses bullet points: ${resume.experience?.some((e) => e.bullets?.length) ?? false}
-Has certifications: ${!!resume.certifications?.length}
-Changes applied: ${changes.length} tailoring changes
+CONTACT: name=${resume.contact?.name ?? "(missing)"}, email=${resume.contact?.email ?? "(missing)"}, location=${resume.contact?.location ?? "(missing)"}, linkedin=${resume.contact?.linkedin ?? "(missing)"}
+SUMMARY (first 300 chars): ${summary || "(none)"}
+SKILLS: ${skillsSample || "(none)"}
+EXPERIENCE: ${allRoles} roles, ${rolesWithBullets} have bullet points
+DATE FORMATS USED: ${periods || "(none)"}
+SAMPLE BULLETS: ${bulletsSample || "(none)"}
+CERTIFICATIONS: ${resume.certifications?.length ? resume.certifications.slice(0, 3).join(", ") : "(none)"}
+TAILORING CHANGES APPLIED: ${changes.length}
 
-Return JSON array. Cover: single-column layout warning, contact info placement, standard headers, date formats, keyword presence, file format recommendation, bullet point usage, section order.`,
+Check ALL of: contact completeness, standard section headers (Summary/Skills/Experience/Education), date format consistency (e.g. "Jan 2020 – Mar 2022"), keyword-rich summary, quantified bullets, no tables/columns/graphics, bullet point usage across all roles, skills list relevance, certifications presence, LinkedIn URL format.`,
       },
     ],
     response_format: { type: "json_object" },
@@ -778,8 +786,8 @@ Return JSON array. Cover: single-column layout warning, contact info placement, 
 
   const text = completion.choices[0]?.message?.content ?? "{}";
   try {
-    const parsed = JSON.parse(text) as { checks?: ATSCheck[] } | ATSCheck[];
-    return Array.isArray(parsed) ? parsed : parsed.checks ?? [];
+    const parsed = JSON.parse(text) as { checks?: ATSCheck[] };
+    return parsed.checks ?? [];
   } catch {
     return [];
   }

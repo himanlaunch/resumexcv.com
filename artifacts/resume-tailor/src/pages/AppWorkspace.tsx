@@ -2557,14 +2557,15 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
 
     } else {
       if (isInsertion) {
-        const companyHint = sec.replace(/experience\s*[-–—]?\s*/i, "").trim();
+        const companyHint = sec.replace(/^experience\s*[-–—:]\s*/i, "").trim().toLowerCase();
         const target = companyHint
-          ? (result.experience ?? []).find(e => e.company.toLowerCase().includes(companyHint)) ?? result.experience?.[0]
+          ? (result.experience ?? []).find(e => e.company.toLowerCase().includes(companyHint) || companyHint.includes(e.company.toLowerCase())) ?? result.experience?.[0]
           : result.experience?.[0];
         if (target) target.bullets = [...(target.bullets ?? []), finalText];
       } else {
+        const normalOrig = (row.original ?? "").trim().toLowerCase();
         for (const exp of result.experience ?? []) {
-          const bulletIdx = exp.bullets?.findIndex(b => b === row.original);
+          const bulletIdx = exp.bullets?.findIndex(b => b.trim().toLowerCase() === normalOrig);
           if (bulletIdx !== undefined && bulletIdx >= 0) {
             exp.bullets![bulletIdx] = finalText;
             break;
@@ -2964,15 +2965,15 @@ async function handleDocxDownload(resume: ResumeData, job: JobResult) {
 function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; tailored: ResumeData; rows: DiffChange[] }) {
   const changedOriginals = new Set(
     rows
-      .filter(r => r.status === "rewritten" && r.confirmed && r.original && r.original !== "[Not in resume]")
+      .filter(r => r.status === "rewritten" && r.original && r.original !== "[Not in resume]")
       .map(r => r.original)
   );
   const changedNewTexts = new Set(
     rows
-      .filter(r => r.status === "rewritten" && r.confirmed)
+      .filter(r => r.status === "rewritten")
       .map(r => (r.customText ?? r.proposed).trim())
   );
-  const changedCount = rows.filter(r => r.status === "rewritten" && r.confirmed).length;
+  const changedCount = rows.filter(r => r.status === "rewritten").length;
 
   const sectionHdr = (title: string) => (
     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase" as const, color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>
@@ -3126,10 +3127,13 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set(savedVersionIds));
   const autoSavedJobIds = useRef<Set<string>>(new Set(savedVersionIds));
 
-  const tailoredResumes: Record<string, ResumeData> = {};
-  for (const job of selectedJobs) {
-    tailoredResumes[job.id] = applyDiffs(resume, jobDiffs[job.id] ?? []);
-  }
+  const tailoredResumes = useMemo(() => {
+    const out: Record<string, ResumeData> = {};
+    for (const job of selectedJobs) {
+      out[job.id] = applyDiffs(resume, jobDiffs[job.id] ?? []);
+    }
+    return out;
+  }, [resume, selectedJobs, jobDiffs]);
 
   useEffect(() => {
     selectedJobs.forEach(job => upsertCampaignFromJob(user?.id, job));
