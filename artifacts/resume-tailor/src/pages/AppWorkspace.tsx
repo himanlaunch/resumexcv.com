@@ -1190,24 +1190,29 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
 // ── Step 2: Job Discovery ─────────────────────────────────────────────────────
 
 const TIME_FILTERS = [
-  { label: "1 hr",     maxHours: 1 },
-  { label: "12 hr",    maxHours: 12 },
-  { label: "24 hr",    maxHours: 24 },
-  { label: "2 days",   maxHours: 48 },
-  { label: "7 days",   maxHours: 168 },
-  { label: "10 days",  maxHours: 240 },
-  { label: "14 days",  maxHours: 336 },
-  { label: "30 days",  maxHours: 720 },
-  { label: "2 months", maxHours: 1440 },
+  { label: "24 hr",   maxHours: 24 },
+  { label: "3 days",  maxHours: 72 },
+  { label: "7 days",  maxHours: 168 },
+  { label: "14 days", maxHours: 336 },
+  { label: "30 days", maxHours: 720 },
 ] as const;
 
 const FEATURED_PLATFORMS = ["LinkedIn", "Indeed", "Glassdoor", "Monster", "Dice", "ZipRecruiter"] as const;
 
 function normalizePlatformLabel(via: string) {
-  return (via || "Other")
+  let label = (via || "Other")
     .replace(/^via\s+/i, "")
+    // Strip "- SomeName" suffix after a domain-looking token
+    .replace(/[a-z0-9-]+\.[a-z]{2,}[^\s]*\s*[-–|]\s*/gi, "")
+    // Strip bare domain-looking tokens (e.g. "frontendnode-production.up.railway.app")
+    .replace(/\b[a-z0-9-]+\.(?:com|app|io|co|net|org|ai|jobs)\b/gi, "")
+    // Collapse pipes/dashes left behind
+    .replace(/\s*[|–-]+\s*$/, "")
     .replace(/\s+/g, " ")
-    .trim() || "Other";
+    .trim();
+  // Truncate very long labels
+  if (label.length > 24) label = label.slice(0, 22).trim() + "…";
+  return label || "Other";
 }
 
 function parsePostedAtHours(postedAt: string): number {
@@ -1232,10 +1237,11 @@ const JOBS_PER_PAGE = 50;
 // mapping it to "3days" would exclude 4–10 day postings.
 function getServerDateFilter(label: string | null): string | undefined {
   if (!label) return undefined;
+  if (label === "3 days") return "3days";
   if (label === "7 days") return "3days";
   if (label === "14 days") return "week";
-  if (label === "30 days" || label === "2 months") return "month";
-  return undefined; // 1 hr, 12 hr, 24 hr, 2 days, 10 days → client-side only
+  if (label === "30 days") return "month";
+  return undefined; // 24 hr → client-side only
 }
 
 // ── Match-score helpers ───────────────────────────────────────────────────────
@@ -1320,15 +1326,19 @@ function computeSkillGap(job: JobResult, resume: ResumeData): { matched: string[
 }
 
 function MatchBadge({ score }: { score: number }) {
-  const color = score >= 75 ? "#00c447" : score >= 55 ? "#F59E0B" : score >= 35 ? "#F97316" : "#9CA3AF";
-  const bg = score >= 75 ? "#ECFFE0" : score >= 55 ? "#FEF3C7" : score >= 35 ? "#FFF0E5" : "#F3F4F6";
+  const { color, bg, label } =
+    score >= 75 ? { color: "#00c447", bg: "#ECFFE0", label: "Strong" } :
+    score >= 55 ? { color: "#D97706", bg: "#FEF3C7", label: "Good" } :
+    score >= 35 ? { color: "#EA580C", bg: "#FFF0E5", label: "Fair" } :
+                  { color: "#9CA3AF", bg: "#F3F4F6", label: "Weak" };
   return (
     <span
+      title={`${score}% keyword match between your resume and this job`}
       className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
       style={{ backgroundColor: bg, color }}
     >
       <TrendingUp className="w-3 h-3" />
-      {score}%
+      {score}% · {label}
     </span>
   );
 }
@@ -1620,111 +1630,86 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
         )}
 
         {/* ── Filter toolbar (shown once first results arrive) ── */}
-        {jobs.length > 0 && (
-          <div className="rounded-2xl mb-5 p-4 space-y-3" style={{ backgroundColor: "#F8F8F8", border: "1px solid #EBEBEB" }}>
-            {/* Time filter */}
-            <div>
-              <p className="text-xs font-semibold mb-2" style={{ color: "#555" }}>Posted within</p>
-              <div className="flex gap-2 flex-wrap">
+        {jobs.length > 0 && (() => {
+          const activeFilterCount = (timeFilter ? 1 : 0) + activePlatforms.size + (minScore > 0 ? 1 : 0);
+          return (
+            <div className="rounded-2xl mb-5 p-4 space-y-3" style={{ backgroundColor: "#F8F8F8", border: "1px solid #EBEBEB" }}>
+              {/* Row 1: Posted within + Sort toggle */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Posted:</span>
+                  <button
+                    onClick={() => setTimeFilter(null)}
+                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                    style={{ backgroundColor: timeFilter === null ? "#00F0A0" : "#fff", color: timeFilter === null ? "#0A0A0A" : "#555", border: timeFilter === null ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                  >
+                    Any
+                  </button>
+                  {TIME_FILTERS.map(f => (
+                    <button key={f.label}
+                      onClick={() => setTimeFilter(prev => prev === f.label ? null : f.label)}
+                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      style={{ backgroundColor: timeFilter === f.label ? "#00F0A0" : "#fff", color: timeFilter === f.label ? "#0A0A0A" : "#555", border: timeFilter === f.label ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  onClick={() => setTimeFilter(null)}
-                  className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                  style={{
-                    backgroundColor: timeFilter === null ? "#00F0A0" : "#fff",
-                    color: timeFilter === null ? "#0A0A0A" : "#555",
-                    border: timeFilter === null ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                  }}
+                  onClick={() => setSortByMatch(v => !v)}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all flex-shrink-0"
+                  style={{ backgroundColor: sortByMatch ? "#0A0A0A" : "#fff", color: sortByMatch ? "#00F0A0" : "#555", border: sortByMatch ? "1.5px solid #0A0A0A" : "1.5px solid #D0D5DD" }}
                 >
-                  Any time
+                  <TrendingUp className="w-3 h-3" />
+                  {sortByMatch ? "Sorted by match" : "Sort by match"}
                 </button>
-                {TIME_FILTERS.map(f => (
+              </div>
+              {/* Row 2: Platform */}
+              {platformOptions.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Platform:</span>
                   <button
-                    key={f.label}
-                    onClick={() => setTimeFilter(prev => prev === f.label ? null : f.label)}
+                    onClick={() => setActivePlatforms(new Set())}
                     className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                    style={{
-                      backgroundColor: timeFilter === f.label ? "#00F0A0" : "#fff",
-                      color: timeFilter === f.label ? "#0A0A0A" : "#555",
-                      border: timeFilter === f.label ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                    }}
+                    style={{ backgroundColor: activePlatforms.size === 0 ? "#00F0A0" : "#fff", color: activePlatforms.size === 0 ? "#0A0A0A" : "#555", border: activePlatforms.size === 0 ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
                   >
-                    {f.label}
+                    All
                   </button>
-                ))}
-              </div>
-            </div>
-            {/* Platform filter */}
-            <div>
-              <p className="text-xs font-semibold mb-2" style={{ color: "#555" }}>Platform</p>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setActivePlatforms(new Set())}
-                  className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                  style={{
-                    backgroundColor: activePlatforms.size === 0 ? "#00F0A0" : "#fff",
-                    color: activePlatforms.size === 0 ? "#0A0A0A" : "#555",
-                    border: activePlatforms.size === 0 ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                  }}
-                >
-                  All
-                </button>
-                {platformOptions.map(({ label: p, count }) => (
-                  <button
-                    key={p}
-                    onClick={() => togglePlatform(p)}
-                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                    style={{
-                      backgroundColor: activePlatforms.has(p) ? "#00F0A0" : "#fff",
-                      color: activePlatforms.has(p) ? "#0A0A0A" : "#555",
-                      border: activePlatforms.has(p) ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                    }}
+                  {platformOptions.map(({ label: p, count }) => (
+                    <button key={p} onClick={() => togglePlatform(p)}
+                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      style={{ backgroundColor: activePlatforms.has(p) ? "#00F0A0" : "#fff", color: activePlatforms.has(p) ? "#0A0A0A" : "#555", border: activePlatforms.has(p) ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                    >
+                      {p} <span style={{ opacity: 0.6 }}>{count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Row 3: Match score + clear */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Match:</span>
+                  {[0, 40, 60, 75, 90].map(pct => (
+                    <button key={pct} onClick={() => setMinScore(pct)}
+                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      style={{ backgroundColor: minScore === pct ? "#00F0A0" : "#fff", color: minScore === pct ? "#0A0A0A" : "#555", border: minScore === pct ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                    >
+                      {pct === 0 ? "Any" : `${pct}%+`}
+                    </button>
+                  ))}
+                </div>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters}
+                    className="text-xs font-semibold flex items-center gap-1 flex-shrink-0"
+                    style={{ color: "#888" }}
                   >
-                    {p}{jobs.length > 0 ? ` ${count}` : ""}
+                    <X className="w-3 h-3" /> Clear {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""}
                   </button>
-                ))}
+                )}
               </div>
             </div>
-            {/* Minimum match score filter */}
-            <div>
-              <p className="text-xs font-semibold mb-2" style={{ color: "#555" }}>Minimum match</p>
-              <div className="flex gap-2 flex-wrap">
-                {[0, 40, 60, 75, 90].map(pct => (
-                  <button
-                    key={pct}
-                    onClick={() => setMinScore(pct)}
-                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                    style={{
-                      backgroundColor: minScore === pct ? "#00F0A0" : "#fff",
-                      color: minScore === pct ? "#0A0A0A" : "#555",
-                      border: minScore === pct ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                    }}
-                  >
-                    {pct === 0 ? "Any" : `${pct}%+`}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Sort by match */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1" style={{ borderTop: "1px solid #E5E5E5" }}>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-3.5 h-3.5" style={{ color: "#888" }} />
-                <p className="text-xs font-semibold" style={{ color: "#555" }}>Sort by resume match</p>
-              </div>
-              <button
-                onClick={() => setSortByMatch(v => !v)}
-                className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full transition-all w-full sm:w-auto"
-                style={{
-                  backgroundColor: sortByMatch ? "#0A0A0A" : "#fff",
-                  color: sortByMatch ? "#00F0A0" : "#555",
-                  border: sortByMatch ? "1.5px solid #0A0A0A" : "1.5px solid #D0D5DD",
-                }}
-              >
-                <TrendingUp className="w-3 h-3" />
-                {sortByMatch ? "Sorted by match" : "Sort by match"}
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Select all row ── */}
         {visibleJobs.length > 0 && (
@@ -1743,7 +1728,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
               >
                 {allVisibleSelected && <Check className="w-3 h-3" style={{ color: "#0A0A0A" }} />}
               </div>
-              {allVisibleSelected ? `Deselect page ${pageJobs.length}` : `Select page ${pageJobs.length}`}
+              {allVisibleSelected ? `Deselect all (${pageJobs.length})` : `Select all (${pageJobs.length})`}
             </button>
             <div className="flex items-center gap-3 flex-wrap">
               {selected.size > 0 && (
