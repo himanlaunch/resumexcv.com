@@ -266,18 +266,19 @@ router.get("/search", async (req, res) => {
 
 // GET /api/jobs/autocomplete?q=<query>&type=role|location
 // Returns SerpAPI Google Autocomplete suggestions for job roles or locations.
+const LOCATION_NOISE_RE = /\b(weather|news|times|restaurant|hotel|map|directions|schedule|score|wiki|population|zip|area code|airport|dmv|nfl|nba|mlb|traffic|crime|covid|economy)\b/i;
+const JOB_SUFFIX_RE = /\s+(jobs?|openings?|careers?|salary|listings?|positions?|hiring|near me|description|resume|interview|requirements?).*$/i;
+
 router.get("/autocomplete", async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   const type = String(req.query.type ?? "role"); // "role" | "location"
 
   if (!q || q.length < 2) return res.json({ suggestions: [] });
-
-  if (!SERPAPI_KEY) {
-    return res.json({ suggestions: [] });
-  }
+  if (!SERPAPI_KEY) return res.json({ suggestions: [] });
 
   try {
-    const searchQuery = type === "location" ? q : q;
+    // For locations, append "jobs" as context so Google returns job-location style completions
+    const searchQuery = type === "location" ? `jobs in ${q}` : q;
     const params = new URLSearchParams({
       engine: "google_autocomplete",
       q: searchQuery,
@@ -297,20 +298,26 @@ router.get("/autocomplete", async (req, res) => {
     let suggestions: string[];
     if (type === "location") {
       suggestions = raw
-        .map(s => s.value)
-        // Keep suggestions that look like geographic locations (contain comma, or known remote/hybrid terms)
-        .filter(s => /,/.test(s) || /\b(remote|hybrid)\b/i.test(s))
-        .map(s => s.replace(/\s+jobs?.*$/i, "").trim())
-        .filter((s, i, arr) => s.length > 2 && arr.indexOf(s) === i)
+        .map(s => s.value
+          // Strip the "jobs in " prefix we added, and any trailing job-noise
+          .replace(/^jobs\s+in\s+/i, "")
+          .replace(JOB_SUFFIX_RE, "")
+          .trim()
+        )
+        .filter(s =>
+          s.length > 1 &&
+          s.length < 60 &&
+          !LOCATION_NOISE_RE.test(s) &&
+          // Must start with the user's query (ensures relevance)
+          s.toLowerCase().startsWith(q.toLowerCase().slice(0, Math.max(2, q.length - 2)))
+        )
+        .filter((s, i, arr) => arr.indexOf(s) === i)
         .slice(0, 6);
     } else {
       suggestions = raw
-        .map(s =>
-          s.value
-            .replace(/\s+(jobs?|openings?|careers?|salary|listings?|positions?|hiring|near me|description|resume).*$/i, "")
-            .trim()
-        )
-        .filter((s, i, arr) => s.length > 2 && s.length < 80 && arr.indexOf(s) === i)
+        .map(s => s.value.replace(JOB_SUFFIX_RE, "").trim())
+        .filter(s => s.length > 2 && s.length < 80 && !LOCATION_NOISE_RE.test(s))
+        .filter((s, i, arr) => arr.indexOf(s) === i)
         .slice(0, 8);
     }
 
