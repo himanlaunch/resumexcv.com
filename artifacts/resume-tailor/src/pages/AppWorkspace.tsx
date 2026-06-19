@@ -2333,23 +2333,16 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
   onRetry: (id: string) => void;
   onCustomText: (id: string, text: string) => void;
 }) {
-  const [editText, setEditText] = useState(row.customText ?? row.proposed);
-  const [editMode, setEditMode] = useState(false);
-  const isPending = row.status === "confirm" && !row.confirmed;
-  const proposedText = (row.customText ?? row.proposed ?? "").trim();
-  const hasSafeProposal = proposedText.length > 0;
   const isTrueGap = row.gapType === "true_gap";
   const shortRequirement = row.jobReq.replace(/^["']|["']$/g, "").replace(/\s+/g, " ").slice(0, 120);
-  const recommendedTrueGapDraft = `Led [real project/workflow/product] related to ${shortRequirement}, using [real tools/methods] for [real audience/scale], resulting in [real measurable outcome].`;
-  const hasUnresolvedPlaceholders = /\[[^\]]+\]/.test(editText);
-  const trueGapPrompt = `Add your real experience for: ${row.jobReq}
-
-Include:
-- What project, product, workflow, or tool you used
-- What you personally did
-- The scale, users, data, team, or business context
-- The measurable result or outcome`;
-
+  const recommendedTrueGapDraft = `Worked on ${shortRequirement} related initiatives — applied relevant skills and delivered measurable outcomes. (Edit to add your specific project, tools, and results.)`;
+  const rawProposed = (row.customText ?? row.proposed ?? "").trim();
+  // For true-gap rows with no AI proposal, surface the recommended draft so users always have something to Accept/Retry/Reject
+  const proposedText = rawProposed.length > 0 ? rawProposed : (isTrueGap ? recommendedTrueGapDraft : "");
+  const hasSafeProposal = proposedText.length > 0;
+  const isPending = row.status === "confirm" && !row.confirmed;
+  const [editText, setEditText] = useState(row.customText ?? row.proposed ?? (isTrueGap ? recommendedTrueGapDraft : ""));
+  const [editMode, setEditMode] = useState(false);
   const gapChip = row.gapType === "true_gap"
     ? <span className="chip-red text-xs">True gap</span>
     : row.gapType === "evidence"
@@ -2372,13 +2365,13 @@ Include:
         </div>
         {row.status !== "kept" && (
           <div className="flex items-center gap-1 flex-wrap">
-            <button onClick={() => { setEditMode(true); setEditText((row.customText ?? row.proposed) || (isTrueGap ? recommendedTrueGapDraft : "")); }}
+            <button onClick={() => { setEditMode(true); setEditText(proposedText || (row.customText ?? row.proposed ?? "")); }}
               className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-lg transition-all"
               style={{ color: "#555" }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = "#EBEBEB"}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-              title={isTrueGap ? "Add a real experience you forgot to include" : "Write your own version"}
-            ><Pen className="w-3 h-3" /> {isTrueGap ? "Add real experience" : "Add own text"}</button>
+              title="Edit this suggestion"
+            ><Pen className="w-3 h-3" /> Edit</button>
             <button onClick={() => onRetry(row.id)} disabled={row.retrying}
               className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-lg transition-all"
               style={{ color: row.retrying ? "#aaa" : "#555" }}
@@ -2409,26 +2402,14 @@ Include:
             </div>
           ) : editMode ? (
             <div className="space-y-2">
-              <p className="text-xs font-semibold mb-1" style={{ color: "#888" }}>
-                {isTrueGap ? "Write the real experience you forgot to include:" : "Write your own version:"}
-              </p>
-              {isTrueGap && (
-                <div className="rounded-lg p-3 text-xs whitespace-pre-line" style={{ backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E" }}>
-                  {trueGapPrompt}
-                </div>
-              )}
+              <p className="text-xs font-semibold mb-1" style={{ color: "#888" }}>Write your own version:</p>
               <textarea className="w-full text-sm rounded-lg px-3 py-2 outline-none resize-none"
                 style={{ border: "1.5px solid #00F0A0", backgroundColor: "#FAFFF8", color: "#0A0A0A", minHeight: 80 }}
-                placeholder={isTrueGap ? "Example: Led/implemented/built [real project] using [real tools] for [real audience/scale], improving [real outcome]." : undefined}
                 value={editText} onChange={e => setEditText(e.target.value)} autoFocus />
-              {isTrueGap && hasUnresolvedPlaceholders && (
-                <p className="text-xs" style={{ color: "#92400E" }}>Replace every bracketed placeholder with your real details before using this text.</p>
-              )}
               <div className="flex flex-col sm:flex-row gap-2">
                 <button onClick={() => { onCustomText(row.id, editText); setEditMode(false); }}
-                  disabled={isTrueGap && hasUnresolvedPlaceholders}
                   className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-                  style={{ backgroundColor: isTrueGap && hasUnresolvedPlaceholders ? "#E5E8EA" : "#00F0A0", color: isTrueGap && hasUnresolvedPlaceholders ? "#888" : "#0A0A0A", border: "1px solid #0A0A0A", cursor: isTrueGap && hasUnresolvedPlaceholders ? "not-allowed" : "pointer" }}
+                  style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
                 ><Check className="w-3 h-3" /> Use this text</button>
                 <button onClick={() => setEditMode(false)} className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
                   style={{ backgroundColor: "#F0F0F0", color: "#555" }}><X className="w-3 h-3" /> Cancel</button>
@@ -2436,54 +2417,18 @@ Include:
             </div>
           ) : (
             <>
-              {hasSafeProposal ? (
-                <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>{proposedText}</span>
-              ) : (
-                <div className="rounded-xl p-3" style={{ backgroundColor: "#FFFBEB", border: "1px solid #FDE68A" }}>
-                  <p className="text-xs font-semibold mb-1" style={{ color: "#92400E" }}>
-                    {isTrueGap ? "Missing from this resume" : "No resume-safe text generated"}
-                  </p>
-                  <p className="text-xs leading-relaxed" style={{ color: "#92400E" }}>
-                    {isTrueGap
-                      ? "If you do have this experience, add the real project, tools, scale, and outcome. If not, reject it."
-                      : "Add your own truthful text, retry, or reject it."}
-                  </p>
-                  {isTrueGap && (
-                    <div className="mt-3 space-y-2">
-                      <div className="rounded-lg p-3" style={{ backgroundColor: "white", border: "1px solid #FDE68A" }}>
-                        <p className="text-xs font-semibold mb-1" style={{ color: "#92400E" }}>Recommended draft to customize</p>
-                        <p className="text-xs leading-relaxed" style={{ color: "#555" }}>{recommendedTrueGapDraft}</p>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                          type="button"
-                          onClick={() => { setEditMode(true); setEditText(recommendedTrueGapDraft); }}
-                          className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-                          style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
-                        >
-                          <Pen className="w-3 h-3" /> Customize recommendation
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setEditMode(true); setEditText(""); }}
-                          className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-                          style={{ backgroundColor: "#fff", color: "#92400E", border: "1px solid #FDE68A" }}
-                        >
-                          Add my own
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>{proposedText}</span>
+              {isTrueGap && !row.customText && rawProposed.length === 0 && (
+                <p className="text-xs mt-2 italic" style={{ color: "#9CA3AF" }}>
+                  AI suggestion — edit to add your specific project, tools, and results.
+                </p>
               )}
               {isPending && (
                 <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                  {hasSafeProposal && (
-                    <button onClick={() => onConfirm(row.id, true)}
+                  <button onClick={() => onConfirm(row.id, true)}
                     className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
                     style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
-                    ><ThumbsUp className="w-3.5 h-3.5" /> Accept</button>
-                  )}
+                  ><ThumbsUp className="w-3.5 h-3.5" /> Accept</button>
                   <button onClick={() => onConfirm(row.id, false)}
                     className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
                     style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
