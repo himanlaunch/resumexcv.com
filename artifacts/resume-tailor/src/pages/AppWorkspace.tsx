@@ -2334,14 +2334,14 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
   onCustomText: (id: string, text: string) => void;
 }) {
   const isTrueGap = row.gapType === "true_gap";
-  const shortRequirement = row.jobReq.replace(/^["']|["']$/g, "").replace(/\s+/g, " ").slice(0, 120);
-  const recommendedTrueGapDraft = `Worked on ${shortRequirement} related initiatives — applied relevant skills and delivered measurable outcomes. (Edit to add your specific project, tools, and results.)`;
+  const isEvidenceGap = row.gapType === "evidence";
+  const needsFallback = isTrueGap || isEvidenceGap;
   const rawProposed = (row.customText ?? row.proposed ?? "").trim();
-  // For true-gap rows with no AI proposal, surface the recommended draft so users always have something to Accept/Retry/Reject
-  const proposedText = rawProposed.length > 0 ? rawProposed : (isTrueGap ? recommendedTrueGapDraft : "");
+  // If the AI returned no proposed text (wiped by sanitizer or left blank), show a Retry prompt
+  const proposedText = rawProposed;
   const hasSafeProposal = proposedText.length > 0;
   const isPending = row.status === "confirm" && !row.confirmed;
-  const [editText, setEditText] = useState(row.customText ?? row.proposed ?? (isTrueGap ? recommendedTrueGapDraft : ""));
+  const [editText, setEditText] = useState(row.customText ?? row.proposed ?? "");
   const [editMode, setEditMode] = useState(false);
   const gapChip = row.gapType === "true_gap"
     ? <span className="chip-red text-xs">True gap</span>
@@ -2365,7 +2365,7 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
         </div>
         {row.status !== "kept" && (
           <div className="flex items-center gap-1 flex-wrap">
-            <button onClick={() => { setEditMode(true); setEditText(proposedText || (row.customText ?? row.proposed ?? "")); }}
+            <button onClick={() => { setEditMode(true); setEditText(row.customText ?? row.proposed ?? ""); }}
               className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-lg transition-all"
               style={{ color: "#555" }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = "#EBEBEB"}
@@ -2417,24 +2417,35 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
             </div>
           ) : (
             <>
-              <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>{proposedText}</span>
-              {isTrueGap && !row.customText && rawProposed.length === 0 && (
-                <p className="text-xs mt-2 italic" style={{ color: "#9CA3AF" }}>
-                  AI suggestion — edit to add your specific project, tools, and results.
-                </p>
-              )}
-              {isPending && (
-                <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                  <button onClick={() => onConfirm(row.id, true)}
-                    className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-                    style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
-                  ><ThumbsUp className="w-3.5 h-3.5" /> Accept</button>
-                  <button onClick={() => onConfirm(row.id, false)}
-                    className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-                    style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
-                  ><ThumbsDown className="w-3.5 h-3.5" /> Reject</button>
+              {hasSafeProposal ? (
+                <>
+                  <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>{proposedText}</span>
+                  {isPending && (
+                    <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                      <button onClick={() => onConfirm(row.id, true)}
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+                        style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
+                      ><ThumbsUp className="w-3.5 h-3.5" /> Accept</button>
+                      <button onClick={() => onConfirm(row.id, false)}
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+                        style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
+                      ><ThumbsDown className="w-3.5 h-3.5" /> Reject</button>
+                    </div>
+                  )}
+                </>
+              ) : needsFallback ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs" style={{ color: "#888" }}>
+                    No suggestion generated. Click <strong>Retry</strong> to get an AI-drafted bullet, or <strong>Edit</strong> to write your own.
+                  </p>
+                  {isPending && (
+                    <button onClick={() => onConfirm(row.id, false)}
+                      className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full w-fit"
+                      style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
+                    ><ThumbsDown className="w-3.5 h-3.5" /> Reject</button>
+                  )}
                 </div>
-              )}
+              ) : null}
             </>
           )}
         </div>
