@@ -36,7 +36,12 @@ STRICT RULES — you must follow these without exception:
 4. Use strong action verbs and quantify impact where evidence already exists in the resume.
 5. Optimize keyword density for ATS without keyword stuffing.
 6. The "proposed" field must contain FINAL RESUME TEXT ONLY. Never include reasoning, caveats, instructions, validation notes, "do not", "unless confirmed", "if accurate", or other meta-commentary in proposed text.
-7. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.`;
+7. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.
+8. WRITING STYLE — proposed text must read as human-written, not AI-generated:
+   - Do NOT use em dashes (—). Use commas, semicolons, or start a new clause instead.
+   - Avoid overused AI buzzwords: "leveraged", "spearheaded", "orchestrated", "championed", "utilized", "synergized", "facilitated", "streamlined" unless the original resume already uses them.
+   - Prefer plain, direct language: "used" over "utilized", "led" over "spearheaded", "helped" over "facilitated".
+   - Do NOT add parenthetical phrases like "(e.g., ...)" or "(resulting in ...)" unless they were in the original.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const MAX_RESUME_PARSE_CHARS = 24000;

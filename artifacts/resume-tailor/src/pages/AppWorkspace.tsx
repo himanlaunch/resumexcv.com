@@ -2467,7 +2467,7 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
   };
 
   for (const row of rows) {
-    if (row.status !== "rewritten" || !row.confirmed) continue;
+    if (row.status !== "rewritten") continue;
     const rawText = (row.customText ?? row.proposed).trim();
     const finalText = sanitizeResumeText(rawText);
     if (!finalText) continue;

@@ -2,7 +2,7 @@ import type { DiffChange, ResumeData } from "@/lib/api";
 
 const UNSAFE_RESUME_NOTE_PATTERNS = [
   /\bdo not\b/i,
-  /\bdon['’]t\b/i,
+  /\bdon[‘’]t\b/i,
   /\bunless\b/i,
   /\bwithout confirmation\b/i,
   /\bif accurate\b/i,
@@ -21,8 +21,6 @@ const UNSAFE_RESUME_NOTE_PATTERNS = [
   /\bproposed rewrite\b/i,
   /\bresume content\b/i,
   /\bresume-ready\b/i,
-  /\bconfirmation\b/i,
-  /\bconfirmed\b/i,
   /\bretain\b.{0,80}\blanguage\b/i,
   /\badd\b.{0,80}\bskills?\b/i,
   /\binclude\b.{0,80}\bbullet\b/i,
@@ -32,8 +30,12 @@ const UNSAFE_RESUME_NOTE_PATTERNS = [
 
 function normalizeText(value: string): string {
   return value
+    // Replace em dashes (common AI writing pattern) with a comma or semicolon
+    .replace(/\s*—\s*/g, ", ")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
+    // Clean up any double commas left by the em dash replacement
+    .replace(/,\s*,/g, ",")
     .trim();
 }
 
@@ -92,12 +94,10 @@ export function isLocationOnlyBullet(value: string | null | undefined): boolean 
   if (parts.length === 2) {
     const [city, countryOrState] = parts;
     return (
-      LOCATION_ONLY_CITIES.has(city) ||
-      /^[a-z\s]+$/.test(city)
+      LOCATION_ONLY_CITIES.has(city)
     ) && (
       LOCATION_ONLY_COUNTRIES.has(countryOrState) ||
-      /^[a-z]{2}$/.test(countryOrState) ||
-      /^[a-z\s]+$/.test(countryOrState)
+      /^[a-z]{2}$/.test(countryOrState)
     );
   }
 
