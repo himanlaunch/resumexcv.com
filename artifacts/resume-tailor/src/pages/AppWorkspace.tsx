@@ -2500,17 +2500,22 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
     } else if (sec.includes("skill")) {
       const finalSkills = sanitizeResumeSkillText(rawText);
       if (finalSkills.length === 0) continue;
+      const normalOrig = (row.original ?? "").trim().toLowerCase();
       if (isInsertion) {
         for (const skill of finalSkills) {
-          if (!result.skills!.includes(skill)) result.skills!.push(skill);
+          if (!result.skills!.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())) {
+            result.skills!.push(skill);
+          }
         }
       } else {
-        const idx = result.skills!.findIndex(s => s === row.original);
+        const idx = result.skills!.findIndex(s => s.trim().toLowerCase() === normalOrig);
         if (idx >= 0) {
           result.skills!.splice(idx, 1, ...finalSkills);
         } else {
           for (const skill of finalSkills) {
-            if (!result.skills!.includes(skill)) result.skills!.push(skill);
+            if (!result.skills!.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())) {
+              result.skills!.push(skill);
+            }
           }
         }
       }
@@ -2542,20 +2547,21 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
       if (isInsertion) {
         result.education!.push({ degree: finalText, school: "", year: "" });
       } else {
-        let matched = false;
+        const normalOrig = (row.original ?? "").trim().toLowerCase();
         for (const edu of result.education ?? []) {
-          if (
-            edu.degree === row.original ||
-            edu.school === row.original ||
-            `${edu.degree}, ${edu.school}` === row.original ||
-            `${edu.degree} from ${edu.school}` === row.original
-          ) {
+          const candidates = [
+            edu.degree,
+            edu.school,
+            `${edu.degree}, ${edu.school}`,
+            `${edu.degree} from ${edu.school}`,
+            `${edu.degree} from ${edu.school} (${edu.year})`,
+          ].map(s => (s ?? "").trim().toLowerCase());
+          if (candidates.some(c => c === normalOrig)) {
             edu.degree = finalText;
-            matched = true;
             break;
           }
         }
-        if (!matched) result.education!.push({ degree: finalText, school: "", year: "" });
+        // No-match: skip silently — inserting a ghost entry is worse than missing an update
       }
 
     } else {
