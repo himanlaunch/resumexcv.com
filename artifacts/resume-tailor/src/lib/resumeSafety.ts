@@ -198,6 +198,11 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
       year: sanitizeResumeText(edu.year),
     })),
     certifications: (resume.certifications ?? [])
+      .flatMap(cert =>
+        cert.includes(";")
+          ? cert.split(/\s*;\s*/).map(c => c.trim()).filter(Boolean)
+          : [cert]
+      )
       .map(sanitizeResumeText)
       .filter(Boolean),
   };

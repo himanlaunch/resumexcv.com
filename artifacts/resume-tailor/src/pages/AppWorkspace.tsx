@@ -2516,12 +2516,26 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
       }
 
     } else if (sec.includes("certification")) {
+      // Split multi-cert proposals — AI sometimes joins all certs with semicolons
+      const certItems = rawText.split(/\s*;\s*/).map(c => sanitizeResumeText(c)).filter(Boolean);
+      const normalOrig = (row.original ?? "").trim().toLowerCase();
       if (isInsertion) {
-        if (!result.certifications!.includes(finalText)) result.certifications!.push(finalText);
+        for (const cert of certItems) {
+          if (!result.certifications!.some(c => c.trim().toLowerCase() === cert.trim().toLowerCase())) {
+            result.certifications!.push(cert);
+          }
+        }
       } else {
-        const idx = result.certifications!.findIndex(c => c === row.original);
-        if (idx >= 0) result.certifications![idx] = finalText;
-        else if (!result.certifications!.includes(finalText)) result.certifications!.push(finalText);
+        const idx = result.certifications!.findIndex(c => c.trim().toLowerCase() === normalOrig);
+        if (idx >= 0 && certItems.length === 1) {
+          result.certifications![idx] = certItems[0];
+        } else {
+          for (const cert of certItems) {
+            if (!result.certifications!.some(c => c.trim().toLowerCase() === cert.trim().toLowerCase())) {
+              result.certifications!.push(cert);
+            }
+          }
+        }
       }
 
     } else if (sec.includes("education")) {
