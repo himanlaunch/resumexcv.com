@@ -2532,8 +2532,9 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
           : result.experience?.[0];
         if (target) target.bullets = [...(target.bullets ?? []), finalText];
       } else {
+        const normalOrig = row.original?.trim().toLowerCase() ?? "";
         for (const exp of result.experience ?? []) {
-          const bulletIdx = exp.bullets?.findIndex(b => b === row.original);
+          const bulletIdx = exp.bullets?.findIndex(b => b.trim().toLowerCase() === normalOrig);
           if (bulletIdx !== undefined && bulletIdx >= 0) {
             exp.bullets![bulletIdx] = finalText;
             break;

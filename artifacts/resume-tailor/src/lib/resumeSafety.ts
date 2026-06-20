@@ -57,6 +57,7 @@ const LOCATION_ONLY_COUNTRIES = new Set([
 ]);
 
 const LOCATION_ONLY_CITIES = new Set([
+  "remote",
   "dublin",
   "london",
   "toronto",
