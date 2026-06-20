@@ -261,32 +261,52 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits 
         >
           <Briefcase className="w-4 h-4" />Campaign Tracker
         </Link>
-        <button
-          onClick={onBuyCredits}
-          className="mt-2 w-full flex items-center justify-between gap-2 text-sm px-3 py-2 rounded-lg transition-colors"
-          style={{ color: "#B8C0C8", backgroundColor: "rgba(0,240,160,0.06)", border: "1px solid rgba(0,240,160,0.18)" }}
-        >
-          <span className="flex items-center gap-2"><Zap className="w-4 h-4" />Buy credits</span>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}>{credits?.balance ?? 0}</span>
-        </button>
-        <div className="mt-3 flex items-center gap-2 px-3 py-2">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs" style={{ backgroundColor: "#333", color: "#ccc" }}>
-            {initials || "U"}
+
+        {!user ? (
+          /* ── Promo sign-in block for signed-out users ── */
+          <div className="mt-3 rounded-xl p-3" style={{ backgroundColor: "rgba(0,240,160,0.08)", border: "1px solid rgba(0,240,160,0.22)" }}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Zap className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00F0A0" }} />
+              <span className="text-xs font-bold" style={{ color: "#00F0A0" }}>10 FREE credits — limited promo</span>
+            </div>
+            <p className="text-xs mb-2.5" style={{ color: "#8B949E" }}>Sign in to claim 10 free resume tailoring credits. No card required.</p>
+            <Link href="/signin"
+              className="block w-full text-center text-xs font-bold py-2 rounded-lg transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}
+            >
+              Sign in &amp; claim credits
+            </Link>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-semibold truncate" style={{ color: "#ccc" }}>{displayName}</div>
-            <div className="text-xs truncate" style={{ color: "#9CA3AF" }}>{displayEmail}</div>
-          </div>
-        </div>
-        <button
-          onClick={() => void signOut()}
-          className="w-full text-left text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
-          style={{ color: "#B8C0C8" }}
-          onMouseEnter={e => { e.currentTarget.style.color = "#FCA5A5"; e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.08)"; }}
-          onMouseLeave={e => { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; }}
-        >
-          Sign out
-        </button>
+        ) : (
+          <>
+            <button
+              onClick={onBuyCredits}
+              className="mt-2 w-full flex items-center justify-between gap-2 text-sm px-3 py-2 rounded-lg transition-colors"
+              style={{ color: "#B8C0C8", backgroundColor: "rgba(0,240,160,0.06)", border: "1px solid rgba(0,240,160,0.18)" }}
+            >
+              <span className="flex items-center gap-2"><Zap className="w-4 h-4" />Buy credits</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}>{credits?.balance ?? 0}</span>
+            </button>
+            <div className="mt-3 flex items-center gap-2 px-3 py-2">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs" style={{ backgroundColor: "#333", color: "#ccc" }}>
+                {initials || "U"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold truncate" style={{ color: "#ccc" }}>{displayName}</div>
+                <div className="text-xs truncate" style={{ color: "#9CA3AF" }}>{displayEmail}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => void signOut()}
+              className="w-full text-left text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+              style={{ color: "#B8C0C8" }}
+              onMouseEnter={e => { e.currentTarget.style.color = "#FCA5A5"; e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.08)"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; }}
+            >
+              Sign out
+            </button>
+          </>
+        )}
       </div>
     </aside>
   );
@@ -363,7 +383,7 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
         <div className="grid grid-cols-3 gap-2 mb-5">
           {[
             ["Balance", credits?.balance ?? 0],
-            ["Free used", `${credits?.freeUsed ?? 0}/${credits?.freeCredits ?? 5}`],
+            ["Free used", `${credits?.freeUsed ?? 0}/${credits?.freeCredits ?? 10}`],
             ["Purchased", credits?.totalPurchased ?? 0],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl p-3 text-center" style={{ backgroundColor: "#F8F9FA", border: "1px solid #E5E8EA" }}>
@@ -3648,6 +3668,24 @@ export default function AppWorkspace() {
     <div className="flex min-h-screen" style={{ backgroundColor: "#F2F4F5" }}>
       <Sidebar step={step} setStep={setStep} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} />
       <main className="flex-1 min-h-screen overflow-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
+        {/* Promo banner for signed-out users */}
+        {!user && !authLoading && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5"
+            style={{ backgroundColor: "#052e16", borderBottom: "1px solid rgba(0,240,160,0.2)" }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <Zap className="w-4 h-4 flex-shrink-0" style={{ color: "#00F0A0" }} />
+              <span className="text-sm font-semibold" style={{ color: "#A7F3D0" }}>
+                Limited promo: Sign in to get <strong style={{ color: "#00F0A0" }}>10 free resume credits</strong> — no card required.
+              </span>
+            </div>
+            <Link href="/signin"
+              className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}
+            >
+              Sign in free
+            </Link>
+          </div>
+        )}
         {step === 1 && (
           <Step1Vault key={savedData?.fileName ?? user?.id ?? "local-vault"} resume={resume} savedData={savedData} savedVersions={savedVersions} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} onParsed={handleParsed} onClear={handleClear} onDeleteVersion={handleDeleteVersion} onDirectJobs={(jobs) => { void handleJobsReady(jobs); }} onUpdateResume={handleUpdateResume} onNext={(titles, locations) => {
             setSearchTitles(titles);
@@ -3661,9 +3699,27 @@ export default function AppWorkspace() {
             onNext={(jobs) => { void handleJobsReady(jobs); }} />
         )}
         {step === 4 && (
-          selectedJobs.length === 0
-            ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => setStep(3)} />
-            : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} />
+          !user
+            ? (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center max-w-sm">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: "#ECFFE0" }}>
+                    <Zap className="w-8 h-8" style={{ color: "#00c447" }} />
+                  </div>
+                  <h2 className="font-heading font-bold text-xl mb-2" style={{ color: "#0A0A0A" }}>Sign in to tailor your resume</h2>
+                  <p className="text-sm mb-1" style={{ color: "#666" }}>
+                    Create a free account and get <strong>10 resume credits</strong> — enough to tailor 10 jobs.
+                  </p>
+                  <p className="text-xs mb-6" style={{ color: "#9CA3AF" }}>No credit card required. Limited promo offer.</p>
+                  <Link href="/signin" className="btn-mint inline-flex items-center gap-2">
+                    Sign in &amp; claim 10 free credits <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+            )
+            : selectedJobs.length === 0
+              ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => setStep(3)} />
+              : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} />
         )}
         {step === 5 && (
           selectedJobs.length === 0

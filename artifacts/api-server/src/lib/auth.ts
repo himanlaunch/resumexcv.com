@@ -31,6 +31,9 @@ export async function getSupabaseUser(req: Request): Promise<AuthUser | null> {
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return null;
 
+  // Reject anonymous Supabase sessions — only email/OAuth sign-ins get credits
+  if ((data.user as any).is_anonymous) return null;
+
   return {
     id: data.user.id,
     email: data.user.email ?? undefined,

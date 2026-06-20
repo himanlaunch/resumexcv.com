@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { pool } from "@workspace/db";
 
-export const FREE_CREDITS = 5;
+export const FREE_CREDITS = 10;
 
 let ensured = false;
 
