@@ -26,6 +26,12 @@ const UNSAFE_RESUME_NOTE_PATTERNS = [
   /\binclude\b.{0,80}\bbullet\b/i,
   /\bclaim\b.{0,80}\bownership\b/i,
   /\bflag\b.{0,80}\bgap\b/i,
+  // Parenthetical edit instructions that AI sometimes injects into proposed text
+  /\(edit to\b/i,
+  /\(add your\b/i,
+  /\(include your\b/i,
+  /\(replace with\b/i,
+  /\(insert your\b/i,
 ];
 
 function normalizeText(value: string): string {

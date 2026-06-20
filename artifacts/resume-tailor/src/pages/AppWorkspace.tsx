@@ -2320,7 +2320,7 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
 }) {
   const isTrueGap = row.gapType === "true_gap";
   const shortRequirement = row.jobReq.replace(/^["']|["']$/g, "").replace(/\s+/g, " ").slice(0, 120);
-  const recommendedTrueGapDraft = `Worked on ${shortRequirement} related initiatives — applied relevant skills and delivered measurable outcomes. (Edit to add your specific project, tools, and results.)`;
+  const recommendedTrueGapDraft = `Worked on ${shortRequirement} related initiatives, applied relevant skills and delivered measurable outcomes.`;
   const rawProposed = (row.customText ?? row.proposed ?? "").trim();
   // For true-gap rows with no AI proposal, surface the recommended draft so users always have something to Accept/Retry/Reject
   const proposedText = rawProposed.length > 0 ? rawProposed : (isTrueGap ? recommendedTrueGapDraft : "");
