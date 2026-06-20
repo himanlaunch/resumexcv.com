@@ -341,7 +341,7 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
 
   if (!open) return null;
   const paidPlans = plans
-    .filter(plan => plan.credits === 30 || plan.credits === 100 || plan.credits > 5)
+    .filter(plan => plan.credits >= 10)
     .sort((a, b) => a.credits - b.credits)
     .slice(0, 2);
   const displayPlans = paidPlans.length > 0
@@ -2972,17 +2972,36 @@ async function handleDocxDownload(resume: ResumeData, job: JobResult) {
 }
 
 function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; tailored: ResumeData; rows: DiffChange[] }) {
-  const changedOriginals = new Set(
-    rows
-      .filter(r => r.status === "rewritten" && r.original && r.original !== "[Not in resume]")
-      .map(r => r.original)
-  );
-  const changedNewTexts = new Set(
-    rows
-      .filter(r => r.status === "rewritten")
-      .map(r => (r.customText ?? r.proposed).trim())
-  );
-  const changedCount = rows.filter(r => r.status === "rewritten").length;
+  const rewrittenRows = rows.filter(r => r.status === "rewritten");
+
+  // Build Sets of every string that styleFn() will be called with so highlights work
+  // across all section types (bullets, skills, certs, education "degree, school")
+  const changedOriginals = new Set<string>();
+  const changedNewTexts = new Set<string>();
+  for (const r of rewrittenRows) {
+    if (r.original && r.original !== "[Not in resume]") {
+      const orig = r.original.trim();
+      changedOriginals.add(orig);
+      // Education originals arrive as "degree from school (year)" — also add "degree, school" format
+      // so styleFn(`${e.degree}, ${e.school}`) matches
+      if (r.section === "Education") {
+        const fromMatch = orig.match(/^(.+?) from (.+?)(?:\s*\(\d{4}\))?\s*$/);
+        if (fromMatch) {
+          const deg = fromMatch[1].trim();
+          const sch = fromMatch[2].trim();
+          changedOriginals.add(`${deg}, ${sch}`);
+          changedOriginals.add(deg);
+        }
+      }
+    }
+    const proposed = (r.customText ?? r.proposed ?? "").trim();
+    // Skills and certs can be semicolon/comma-joined — add each token individually
+    for (const tok of proposed.split(/\s*[,;]\s*/).map(t => t.trim()).filter(Boolean)) {
+      changedNewTexts.add(tok);
+    }
+    changedNewTexts.add(proposed);
+  }
+  const changedCount = rewrittenRows.length;
 
   const sectionHdr = (title: string) => (
     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase" as const, color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>

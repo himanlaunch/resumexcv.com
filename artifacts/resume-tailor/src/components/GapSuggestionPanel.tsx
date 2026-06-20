@@ -140,14 +140,18 @@ export function GapSuggestionPanel({ resume, onAddExperience }: Props) {
   }, []); // run once on mount
 
   const fetchSuggestion = useCallback(async (index: number) => {
-    setGapStates(prev =>
-      prev.map((s, i) => i === index ? { ...s, status: "loading", error: null } : s)
-    );
-    const gap = gapStates[index]?.gap ?? detectGaps(resume.experience)[index];
+    let gap: DetectedGap | undefined;
+    setGapStates(prev => {
+      gap = prev[index]?.gap;
+      return prev.map((s, i) => i === index ? { ...s, status: "loading", error: null } : s);
+    });
+    // Fallback: re-detect if state hasn't hydrated yet
+    if (!gap) gap = detectGaps(resume.experience)[index];
     if (!gap) return;
+    const capturedGap = gap;
     try {
       const suggestion = await suggestGapExperience(
-        resume, gap.gapStart, gap.gapEnd, gap.durationMonths
+        resume, capturedGap.gapStart, capturedGap.gapEnd, capturedGap.durationMonths
       );
       setGapStates(prev =>
         prev.map((s, i) => i === index ? { ...s, status: "ready", suggestion } : s)
@@ -161,7 +165,7 @@ export function GapSuggestionPanel({ resume, onAddExperience }: Props) {
         )
       );
     }
-  }, [gapStates, resume]);
+  }, [resume]);
 
   if (!initialized || gapStates.length === 0) return null;
 

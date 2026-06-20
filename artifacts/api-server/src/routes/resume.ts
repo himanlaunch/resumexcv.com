@@ -705,7 +705,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   "changes": [
     {
       "id": "<unique string>",
-      "section": "<section name>",
+      "section": "<use exactly one of: 'Summary' | 'Skills' | 'Education' | 'Certifications' | 'Experience - <Company Name>' where <Company Name> is the exact company name from the resume>",
       "original": "<original text from resume or '[Not in resume]'>",
       "jobReq": "<specific requirement from job description this addresses>",
       "proposed": "<final resume-ready rewrite only; no notes, reasoning, caveats, or instructions>",
