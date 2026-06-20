@@ -197,13 +197,22 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
       school: sanitizeResumeText(edu.school),
       year: sanitizeResumeText(edu.year),
     })),
-    certifications: (resume.certifications ?? [])
-      .flatMap(cert =>
-        cert.includes(";")
-          ? cert.split(/\s*;\s*/).map(c => c.trim()).filter(Boolean)
-          : [cert]
-      )
-      .map(sanitizeResumeText)
-      .filter(Boolean),
+    certifications: (() => {
+      const seen = new Set<string>();
+      return (resume.certifications ?? [])
+        .flatMap(cert =>
+          cert.includes(";")
+            ? cert.split(/\s*;\s*/).map(c => c.trim()).filter(Boolean)
+            : [cert]
+        )
+        .map(sanitizeResumeText)
+        .filter(Boolean)
+        .filter(cert => {
+          const key = cert.trim().toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    })(),
   };
 }
