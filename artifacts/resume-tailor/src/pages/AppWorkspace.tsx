@@ -2933,15 +2933,15 @@ async function handleDocxDownload(resume: ResumeData, job: JobResult) {
 function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; tailored: ResumeData; rows: DiffChange[] }) {
   const changedOriginals = new Set(
     rows
-      .filter(r => r.status === "rewritten" && r.confirmed && r.original && r.original !== "[Not in resume]")
+      .filter(r => r.status === "rewritten" && r.original && r.original !== "[Not in resume]")
       .map(r => r.original)
   );
   const changedNewTexts = new Set(
     rows
-      .filter(r => r.status === "rewritten" && r.confirmed)
+      .filter(r => r.status === "rewritten")
       .map(r => (r.customText ?? r.proposed).trim())
   );
-  const changedCount = rows.filter(r => r.status === "rewritten" && r.confirmed).length;
+  const changedCount = rows.filter(r => r.status === "rewritten").length;
 
   const sectionHdr = (title: string) => (
     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase" as const, color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>
@@ -3248,7 +3248,7 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
             const color = companyColor(job.company);
             const tailored = tailoredResumes[job.id];
             const rows = jobDiffs[job.id] ?? [];
-            const changedCount = rows.filter(r => r.status === "rewritten" && r.confirmed).length;
+            const changedCount = rows.filter(r => r.status === "rewritten").length;
             return (
               <div key={job.id} className="card-base rounded-2xl overflow-hidden">
                 <div className="p-4 md:p-5">
