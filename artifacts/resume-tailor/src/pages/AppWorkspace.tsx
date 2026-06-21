@@ -2862,6 +2862,7 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
     experience: (base.experience ?? []).map(e => ({ ...e, bullets: [...(e.bullets ?? [])] })),
     education: (base.education ?? []).map(e => ({ ...e })),
     certifications: [...(base.certifications ?? [])],
+    achievements: [...(base.achievements ?? [])],
   };
 
   for (const row of rows) {
