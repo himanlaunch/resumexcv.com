@@ -112,8 +112,10 @@ function mapJob(j: SerpJob, fallbackId: string) {
 }
 
 // GET /api/jobs/search?titles=Staff+Engineer&location=Remote+US,New+York+NY&start=0&dateFilter=week
-// `location` accepts a comma-separated list of locations for multi-location search
-// (max 2 unique city locations searched in parallel to protect quota).
+// `location` accepts a pipe-separated list of locations for multi-location search
+// (max 3 unique city locations searched in parallel to protect quota).
+// Each title is searched individually and results are merged — Google Jobs does not
+// support OR operators reliably, so per-title parallel calls yield far better results.
 router.get("/search", async (req, res) => {
   if (!SERPAPI_KEY) {
     return res.status(500).json({ error: "SERPAPI_KEY not configured" });
@@ -124,9 +126,10 @@ router.get("/search", async (req, res) => {
   const start = Math.max(0, Number(req.query.start) || 0);
   const cursor = (req.query.cursor as string) || "";
   const limit = Math.min(Math.max(1, Number(req.query.limit) || 10), 30);
+  // Cap pages at 3 per title to stay within SerpAPI quota
   const pageBatchSize = Math.min(
-    Math.max(1, Number(req.query.pages) || SERPAPI_PAGES_PER_BATCH),
-    SERPAPI_MAX_PAGES_PER_BATCH
+    Math.max(1, Number(req.query.pages) || 3),
+    3
   );
   const dateFilter = (req.query.dateFilter as string) || "";
 
@@ -134,7 +137,7 @@ router.get("/search", async (req, res) => {
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean)
-    .slice(0, 5);
+    .slice(0, 5); // max 5 titles
 
   if (titles.length === 0) {
     return res.status(400).json({ error: "At least one job title required" });
@@ -154,15 +157,14 @@ router.get("/search", async (req, res) => {
     .filter((l) => !/^remote|^hybrid/i.test(l))
     .map((l) => l.replace(/\(.*?\)/g, "").trim())
     .filter(Boolean)
-    .slice(0, 3); // max 3 city searches (matches UI maxLocations)
+    .slice(0, 3); // max 3 city searches
 
   // If only remote options were selected, use "United States" as geographic base
   const searchCities = cityTokens.length > 0 ? cityTokens : ["United States"];
 
-  const query = titles.join(" OR ");
   const chipsValue = DATE_CHIPS[dateFilter] ?? "";
 
-  const buildParams = (city: string, nextPageToken?: string) =>
+  const buildParams = (query: string, city: string, nextPageToken?: string) =>
     new URLSearchParams({
       engine: "google_jobs",
       q: query,
@@ -178,8 +180,8 @@ router.get("/search", async (req, res) => {
   try {
     const cursorTokens = decodeCursor(cursor);
 
-    const fetchPage = async (city: string, nextPageToken?: string): Promise<SerpResponse> => {
-      const r = await fetch(`https://serpapi.com/search?${buildParams(city, nextPageToken)}`);
+    const fetchPage = async (query: string, city: string, nextPageToken?: string): Promise<SerpResponse> => {
+      const r = await fetch(`https://serpapi.com/search?${buildParams(query, city, nextPageToken)}`);
       if (!r.ok) {
         const text = await r.text().catch(() => "");
         if (r.status === 429) {
@@ -202,17 +204,29 @@ router.get("/search", async (req, res) => {
       : chipsValue === "date_posted:month" ? "30"
       : "";
 
-    const [cityResults, indeedJobs] = await Promise.all([
-      // Google Jobs — paginated, per city
+    // Search each title individually per city — Google Jobs does not reliably support
+    // OR operators, so per-title calls yield significantly more results.
+    const searchCombinations: { title: string; city: string; cursorKey: string }[] = [];
+    for (const title of titles) {
+      for (const city of searchCities) {
+        searchCombinations.push({ title, city, cursorKey: `${title}::${city}` });
+      }
+    }
+
+    const [titleCityResults, indeedJobs] = await Promise.all([
+      // Google Jobs — one search per (title × city) combination
       Promise.all(
-        searchCities.map(async (city) => {
+        searchCombinations.map(async ({ title, city, cursorKey }) => {
           const responses: SerpResponse[] = [];
-          let nextPageToken = cursorTokens[city];
+          let nextPageToken = cursorTokens[cursorKey];
 
           for (let page = 0; page < pageBatchSize; page++) {
-            const data = await fetchPage(city, nextPageToken);
+            const data = await fetchPage(title, city, nextPageToken);
             responses.push(data);
-
+            if (data.error && SERPAPI_NO_RESULTS_RE.test(data.error)) {
+              logger.debug({ title, city }, "SerpAPI: no results for this title/city");
+              break;
+            }
             const nextToken = data.serpapi_pagination?.next_page_token;
             if (!nextToken) {
               nextPageToken = undefined;
@@ -221,16 +235,16 @@ router.get("/search", async (req, res) => {
             nextPageToken = nextToken;
           }
 
-          return { city, responses, nextPageToken };
+          return { cursorKey, responses, nextPageToken };
         })
       ),
-      // Indeed — one page per city, best-effort supplement
+      // Indeed — one page per (title × city), best-effort supplement
       Promise.all(
-        searchCities.map(async (city, ci) => {
+        searchCombinations.slice(0, 3).map(async ({ title, city }, ci) => {
           try {
             const p = new URLSearchParams({
               engine: "indeed_jobs",
-              q: hasRemote ? `${query} remote` : query,
+              q: hasRemote ? `${title} remote` : title,
               l: city === "United States" ? "" : city,
               api_key: SERPAPI_KEY!,
               ...(indeedFromage ? { fromage: indeedFromage } : {}),
@@ -259,19 +273,17 @@ router.get("/search", async (req, res) => {
       ).then((rs) => rs.flat()),
     ]);
 
-    const responses = cityResults.flatMap((r) => r.responses);
+    const responses = titleCityResults.flatMap((r) => r.responses);
 
-    // SerpAPI reports no Google Jobs matches as an `error`; treat that as
-    // a successful empty search so the UI can show a normal zero-result state.
+    // If ALL responses are fatal errors (not just "no results"), surface the first one
     const fatalResponses = responses.filter((d) => d.error && !SERPAPI_NO_RESULTS_RE.test(d.error));
     const firstError = fatalResponses[0]?.error;
     if (firstError && fatalResponses.length === responses.length) {
+      logger.error({ firstError }, "All SerpAPI responses are fatal errors");
       return res.status(502).json({ error: firstError });
     }
 
-    // Merge results — deduplicate by SerpAPI id and stable listing fields,
-    // preserving insertion order. Google Jobs can repeat the same listing across
-    // pages with different opaque ids.
+    // Merge results — deduplicate by SerpAPI id and stable listing fields
     const seenIds = new Set<string>();
     const seenKeys = new Set<string>();
     const jobs = responses.flatMap((data, responseIdx) =>
@@ -297,19 +309,21 @@ router.get("/search", async (req, res) => {
       }
     }
 
+    logger.info({ titles, searchCities, totalJobs: jobs.length, pageBatchSize }, "Job search complete");
+
     const nextTokens = Object.fromEntries(
-      cityResults
+      titleCityResults
         .filter((r) => r.nextPageToken)
-        .map((r) => [r.city, r.nextPageToken!])
+        .map((r) => [r.cursorKey, r.nextPageToken!])
     );
     const hasMore = Object.keys(nextTokens).length > 0;
-    const pagesFetched = Math.max(0, ...cityResults.map((r) => r.responses.length));
+    const pagesFetched = Math.max(0, ...titleCityResults.map((r) => r.responses.length));
     const nextStart = start + pagesFetched * SERPAPI_PAGE_SIZE;
     const nextCursor = hasMore ? encodeCursor(nextTokens) : null;
 
     return res.json({
       jobs,
-      query,
+      query: titles.join(" | "),
       locations: searchCities,
       count: jobs.length,
       hasMore,

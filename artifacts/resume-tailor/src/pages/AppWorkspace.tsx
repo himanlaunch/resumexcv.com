@@ -1607,7 +1607,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
       const result = await searchJobs(
         titles,
         location,
-        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: 10, platforms },
+        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: 3, platforms },
         !append ? (job) => setJobs(prev => [...prev, job]) : undefined
       );
       if (append) {
