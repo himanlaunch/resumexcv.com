@@ -8,6 +8,7 @@ import SharedResume from "@/pages/SharedResume";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
 import Blog from "@/pages/Blog";
+import Admin from "@/pages/Admin";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
 const queryClient = new QueryClient();
@@ -64,6 +65,7 @@ function App() {
               <RequireAuth><Campaigns /></RequireAuth>
             </Route>
             <Route path="/r/:id" component={SharedResume} />
+            <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </Switch>
         </WouterRouter>
