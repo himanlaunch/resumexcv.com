@@ -2427,7 +2427,9 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
     };
     for (const row of rows) {
       const text = row.customText ?? row.proposed ?? "";
-      if (!text || !row.confirmed) continue;
+      if (!text) continue;
+      if (row.status === "kept") continue;
+      if (row.status === "confirm" && !row.confirmed) continue;
       if (row.section === "Summary") {
         projectedResume.summary = text;
       } else if (row.section === "Skills") {
