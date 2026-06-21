@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { Router } from "express";
+import crypto from "crypto";
 import { logger } from "../lib/logger.js";
+import { pool } from "@workspace/db";
 import OpenAI from "openai";
 
 const DEPLOYMENT = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5.5";
@@ -57,6 +59,97 @@ type SerpResponse = {
 };
 
 const SERPAPI_NO_RESULTS_RE = /hasn't returned any results|no results/i;
+
+// ── Job search cache ──────────────────────────────────────────────────────────
+// Results are cached per (title, city, dateFilter) so any two users searching
+// the same title+city combination share a single SerpAPI call.
+
+type MappedJob = ReturnType<typeof mapJob>;
+
+let cacheTableReady = false;
+async function ensureJobCacheTable() {
+  if (cacheTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cached_job_searches (
+      cache_key     TEXT PRIMARY KEY,
+      title         TEXT NOT NULL,
+      location      TEXT NOT NULL,
+      date_filter   TEXT NOT NULL DEFAULT '',
+      jobs          JSONB NOT NULL DEFAULT '[]',
+      has_more      BOOLEAN NOT NULL DEFAULT false,
+      next_cursor   TEXT,
+      hit_count     INTEGER NOT NULL DEFAULT 1,
+      fetched_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at    TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_cached_job_searches_expires
+      ON cached_job_searches(expires_at);
+  `);
+  cacheTableReady = true;
+}
+
+function jobCacheKey(title: string, city: string, dateFilter: string): string {
+  const input = `${title.trim().toLowerCase()}::${city.trim().toLowerCase()}::${dateFilter}`;
+  return crypto.createHash("sha256").update(input).digest("hex").slice(0, 40);
+}
+
+function cacheTtlSeconds(dateFilter: string): number {
+  switch (dateFilter) {
+    case "today":  return 30 * 60;      // 30 min — fresh listings matter
+    case "3days":  return 60 * 60;      // 1 h
+    case "week":   return 2 * 60 * 60;  // 2 h
+    case "month":  return 8 * 60 * 60;  // 8 h
+    default:       return 4 * 60 * 60;  // 4 h for unfiltered searches
+  }
+}
+
+async function getJobCache(
+  title: string,
+  city: string,
+  dateFilter: string,
+): Promise<MappedJob[] | null> {
+  try {
+    await ensureJobCacheTable();
+    const key = jobCacheKey(title, city, dateFilter);
+    const { rows } = await pool.query(
+      `UPDATE cached_job_searches
+          SET hit_count = hit_count + 1
+        WHERE cache_key = $1 AND expires_at > NOW()
+       RETURNING jobs`,
+      [key],
+    );
+    if (!rows.length) return null;
+    return rows[0].jobs as MappedJob[];
+  } catch {
+    return null; // cache miss on DB error — fall through to live fetch
+  }
+}
+
+async function setJobCache(
+  title: string,
+  city: string,
+  dateFilter: string,
+  jobs: MappedJob[],
+): Promise<void> {
+  try {
+    await ensureJobCacheTable();
+    const key = jobCacheKey(title, city, dateFilter);
+    const ttl = cacheTtlSeconds(dateFilter);
+    await pool.query(
+      `INSERT INTO cached_job_searches
+         (cache_key, title, location, date_filter, jobs, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NOW() + ($6 * INTERVAL '1 second'))
+       ON CONFLICT (cache_key) DO UPDATE
+         SET jobs       = EXCLUDED.jobs,
+             fetched_at = NOW(),
+             expires_at = NOW() + ($6 * INTERVAL '1 second'),
+             hit_count  = cached_job_searches.hit_count + 1`,
+      [key, title, city, dateFilter, JSON.stringify(jobs), ttl],
+    );
+  } catch (err) {
+    logger.warn({ err }, "Job cache write failed — non-fatal");
+  }
+}
 
 function normalizeJobText(value: string | null | undefined) {
   return (value ?? "")
@@ -206,6 +299,8 @@ router.get("/search", async (req, res) => {
 
     // Search each title individually per city — Google Jobs does not reliably support
     // OR operators, so per-title calls yield significantly more results.
+    // For fresh searches (no cursor) we check the shared job cache first; cache hits
+    // skip the SerpAPI call entirely, saving credits and returning instantly.
     const searchCombinations: { title: string; city: string; cursorKey: string }[] = [];
     for (const title of titles) {
       for (const city of searchCities) {
@@ -213,13 +308,24 @@ router.get("/search", async (req, res) => {
       }
     }
 
+    const isFreshSearch = !cursor; // only use cache on first-page searches
+
     const [titleCityResults, indeedJobs] = await Promise.all([
-      // Google Jobs — one search per (title × city) combination
+      // Google Jobs — cache-first, then SerpAPI per (title × city)
       Promise.all(
-        searchCombinations.map(async ({ title, city, cursorKey }) => {
+        searchCombinations.map(async ({ title, city, cursorKey }, comboIdx) => {
+          // ── Cache check ──────────────────────────────────────────────────────
+          if (isFreshSearch) {
+            const cached = await getJobCache(title, city, dateFilter);
+            if (cached) {
+              logger.debug({ title, city, count: cached.length }, "Job search cache hit");
+              return { cursorKey, mappedJobs: cached, nextPageToken: undefined, fromCache: true };
+            }
+          }
+
+          // ── Live SerpAPI fetch ───────────────────────────────────────────────
           const responses: SerpResponse[] = [];
           let nextPageToken = cursorTokens[cursorKey];
-
           for (let page = 0; page < pageBatchSize; page++) {
             const data = await fetchPage(title, city, nextPageToken);
             responses.push(data);
@@ -228,19 +334,45 @@ router.get("/search", async (req, res) => {
               break;
             }
             const nextToken = data.serpapi_pagination?.next_page_token;
-            if (!nextToken) {
-              nextPageToken = undefined;
-              break;
-            }
+            if (!nextToken) { nextPageToken = undefined; break; }
             nextPageToken = nextToken;
           }
 
-          return { cursorKey, responses, nextPageToken };
+          // Map SerpAPI results → standard job shape
+          const mappedJobs: MappedJob[] = [];
+          const localSeen = new Set<string>();
+          for (let ri = 0; ri < responses.length; ri++) {
+            for (let ji = 0; ji < (responses[ri].jobs_results ?? []).length; ji++) {
+              const j = responses[ri].jobs_results![ji];
+              const key = jobDedupKey(j);
+              if (localSeen.has(key)) continue;
+              localSeen.add(key);
+              mappedJobs.push(mapJob(j, `job-${comboIdx}-${ri}-${ji}-${start}`));
+            }
+          }
+
+          // Write to cache (fire-and-forget) for fresh searches with results
+          if (isFreshSearch && mappedJobs.length > 0) {
+            void setJobCache(title, city, dateFilter, mappedJobs);
+          }
+
+          // Check for fatal errors (not "no results")
+          const hasFatal = responses.every(d => d.error && !SERPAPI_NO_RESULTS_RE.test(d.error ?? ""));
+          if (hasFatal) {
+            const err = responses[0]?.error;
+            logger.error({ title, city, err }, "SerpAPI fatal error");
+          }
+
+          return { cursorKey, mappedJobs, nextPageToken, fromCache: false };
         })
       ),
-      // Indeed — one page per (title × city), best-effort supplement
+      // Indeed — one page per (title × city), best-effort supplement (skip for cached combos)
       Promise.all(
         searchCombinations.slice(0, 3).map(async ({ title, city }, ci) => {
+          if (isFreshSearch) {
+            const cached = await getJobCache(`indeed::${title}`, city, dateFilter);
+            if (cached) return cached;
+          }
           try {
             const p = new URLSearchParams({
               engine: "indeed_jobs",
@@ -252,7 +384,7 @@ router.get("/search", async (req, res) => {
             const r = await fetch(`https://serpapi.com/search?${p}`);
             if (!r.ok) return [];
             const d = await r.json() as { jobs_results?: any[] };
-            return (d.jobs_results ?? []).map((j: any, idx: number) => ({
+            const indeedMapped = (d.jobs_results ?? []).map((j: any, idx: number) => ({
               id: j.job_id ?? j.id ?? `indeed-${ci}-${start}-${idx}`,
               title: j.title ?? "",
               company: j.company_name ?? "",
@@ -266,6 +398,10 @@ router.get("/search", async (req, res) => {
               scheduleType: j.job_type ?? "Full-time",
               applyLink: j.link ?? null,
             }));
+            if (isFreshSearch && indeedMapped.length > 0) {
+              void setJobCache(`indeed::${title}`, city, dateFilter, indeedMapped);
+            }
+            return indeedMapped;
           } catch {
             return [];
           }
@@ -273,33 +409,27 @@ router.get("/search", async (req, res) => {
       ).then((rs) => rs.flat()),
     ]);
 
-    const responses = titleCityResults.flatMap((r) => r.responses);
-
-    // If ALL responses are fatal errors (not just "no results"), surface the first one
-    const fatalResponses = responses.filter((d) => d.error && !SERPAPI_NO_RESULTS_RE.test(d.error));
-    const firstError = fatalResponses[0]?.error;
-    if (firstError && fatalResponses.length === responses.length) {
-      logger.error({ firstError }, "All SerpAPI responses are fatal errors");
-      return res.status(502).json({ error: firstError });
-    }
-
-    // Merge results — deduplicate by SerpAPI id and stable listing fields
+    // Merge all per-(title × city) results with global dedup
     const seenIds = new Set<string>();
     const seenKeys = new Set<string>();
-    const jobs = responses.flatMap((data, responseIdx) =>
-      (data.jobs_results ?? [])
-        .filter((j) => {
-          const id = j.job_id;
-          const key = jobDedupKey(j);
-          if ((id && seenIds.has(id)) || seenKeys.has(key)) return false;
-          if (id) seenIds.add(id);
-          seenKeys.add(key);
-          return true;
-        })
-        .map((j, idx) => mapJob(j, `job-${responseIdx}-${start}-${idx}`))
-    );
+    const jobs: MappedJob[] = [];
+    for (const { mappedJobs } of titleCityResults) {
+      for (const j of mappedJobs) {
+        const key = ["job", normalizeJobText(j.title), normalizeJobText(j.company), normalizeJobText(j.location), normalizeJobText(j.via)].join(":");
+        if ((j.id && seenIds.has(j.id)) || seenKeys.has(key)) continue;
+        if (j.id) seenIds.add(j.id);
+        seenKeys.add(key);
+        jobs.push(j);
+      }
+    }
 
-    // Append Indeed jobs that aren't already represented in Google Jobs results
+    // Check if every combination had a fatal SerpAPI error (not just empty results)
+    const allFatal = titleCityResults.every(r => !r.fromCache && r.mappedJobs.length === 0);
+    if (allFatal && jobs.length === 0) {
+      logger.error({ titles, searchCities }, "All SerpAPI title/city combinations returned fatal errors or zero results");
+    }
+
+    // Append Indeed jobs not already in Google Jobs results
     for (const ij of indeedJobs) {
       const key = ["job", normalizeJobText(ij.title), normalizeJobText(ij.company), normalizeJobText(ij.location), normalizeJobText(ij.via)].join(":");
       if (!seenIds.has(ij.id) && !seenKeys.has(key)) {
@@ -309,7 +439,8 @@ router.get("/search", async (req, res) => {
       }
     }
 
-    logger.info({ titles, searchCities, totalJobs: jobs.length, pageBatchSize }, "Job search complete");
+    const cacheHits = titleCityResults.filter(r => r.fromCache).length;
+    logger.info({ titles, searchCities, totalJobs: jobs.length, cacheHits, pageBatchSize }, "Job search complete");
 
     const nextTokens = Object.fromEntries(
       titleCityResults
@@ -317,7 +448,7 @@ router.get("/search", async (req, res) => {
         .map((r) => [r.cursorKey, r.nextPageToken!])
     );
     const hasMore = Object.keys(nextTokens).length > 0;
-    const pagesFetched = Math.max(0, ...titleCityResults.map((r) => r.responses.length));
+    const pagesFetched = Math.max(0, ...titleCityResults.map((r) => r.mappedJobs.length > 0 ? 1 : 0));
     const nextStart = start + pagesFetched * SERPAPI_PAGE_SIZE;
     const nextCursor = hasMore ? encodeCursor(nextTokens) : null;
 
