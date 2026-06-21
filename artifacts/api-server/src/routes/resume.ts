@@ -246,9 +246,82 @@ function sanitizeResumeRecord(resume: ResumeRecord): ResumeRecord {
       location: sanitizeResumeText(edu.location),
       year: sanitizeResumeText(edu.year),
     })),
-    certifications: (resume.certifications ?? []).map(sanitizeResumeText).filter(Boolean),
-    achievements: (resume.achievements ?? []).map(sanitizeResumeText).filter(Boolean),
+    ...classifyAndSanitize(resume),
   };
+}
+
+// Normalize a string for dedup comparison: lowercase, strip punctuation/year suffixes
+function dedupNorm(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\s*\(.*?\)/g, "") // strip parenthetical notes like "(BMC)" or "(All India Rank-4, 2012)"
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Patterns that indicate an item is an achievement/award, NOT a certification
+const ACHIEVEMENT_PATTERNS = [
+  /scholarship/i,
+  /rank[\s-]?\d/i,
+  /merit[\s-]based/i,
+  /honour|honor/i,
+  /award/i,
+  /prize/i,
+  /\btopper\b/i,
+  /\branked\b/i,
+  /\ball india\b/i,
+  /\bnational rank\b/i,
+  /\bgold medal\b/i,
+  /\bsilver medal\b/i,
+];
+
+function isAchievementItem(s: string): boolean {
+  return ACHIEVEMENT_PATTERNS.some(re => re.test(s));
+}
+
+// Deduplicate a list, keeping the longer (more specific) version when two are near-duplicates
+function deduplicateList(items: string[]): string[] {
+  const kept: string[] = [];
+  for (const item of items) {
+    const norm = dedupNorm(item);
+    // Check if this item is already represented by a kept item (substring match either way)
+    const isDup = kept.some(k => {
+      const kNorm = dedupNorm(k);
+      return norm === kNorm || norm.includes(kNorm) || kNorm.includes(norm);
+    });
+    if (!isDup) {
+      // Replace any existing kept item that is a prefix of this one (keep the more specific)
+      const idxToReplace = kept.findIndex(k => {
+        const kNorm = dedupNorm(k);
+        return norm.includes(kNorm) && item.length > k.length;
+      });
+      if (idxToReplace >= 0) {
+        kept[idxToReplace] = item;
+      } else {
+        kept.push(item);
+      }
+    }
+  }
+  return kept;
+}
+
+function classifyAndSanitize(resume: ResumeRecord): { certifications: string[]; achievements: string[] } {
+  const rawCerts = (resume.certifications ?? []).map(sanitizeResumeText).filter(Boolean);
+  const rawAch = (resume.achievements ?? []).map(sanitizeResumeText).filter(Boolean);
+
+  // Move any achievement-pattern items that ended up in certifications
+  const certs: string[] = [];
+  const promoted: string[] = [];
+  for (const c of rawCerts) {
+    if (isAchievementItem(c)) promoted.push(c);
+    else certs.push(c);
+  }
+
+  const achievements = deduplicateList([...rawAch, ...promoted]);
+  const certifications = deduplicateList(certs);
+
+  return { certifications, achievements };
 }
 
 async function repairTailoringJson(malformedJson: string, parseError: unknown): Promise<TailoringResult> {
@@ -341,7 +414,12 @@ router.post("/parse", upload.single("file"), async (req, res) => {
     await ensureParseCacheTable();
     const cached = await pool.query("SELECT result FROM cached_resume_parses WHERE file_hash = $1", [fileHash]);
     if (cached.rows.length > 0) {
-      return res.json(cached.rows[0].result);
+      // Re-apply sanitization on cached results so fixes apply without re-parsing
+      const cachedResult = cached.rows[0].result;
+      if (cachedResult?.resume) {
+        cachedResult.resume = sanitizeResumeRecord(cachedResult.resume);
+      }
+      return res.json(cachedResult);
     }
   } catch {
     // Cache lookup failure is non-fatal — fall through to AI parse
@@ -389,8 +467,10 @@ Rules:
 - "contact.phone": extract the candidate's phone number exactly as written.
 - "experience[].location": extract the city/country where each role was based (e.g. "Dublin, Ireland", "Remote, USA"). Use empty string if not stated.
 - "education[].location": extract the city/country of the school (e.g. "St. Louis, MO"). Use empty string if not stated.
-- "achievements": capture items from any Achievements or Awards section (promotions, scholarships, rankings, honours). Do NOT put these in certifications. Certifications are only professional credentials and training certificates.
-- "certifications": only professional certifications, licenses, and training programs — NOT achievements or awards.
+- "achievements": capture items from any Achievements, Awards, Honours, or Scholarships section — scholarships, national/state rankings, merit awards, medals, promotions. Do NOT put these in certifications.
+- "certifications": ONLY professional certifications, technical credentials, and training program completions (e.g. "AWS Certified", "Microsoft SQL Server Training", "Bloomberg Market Concepts"). NOT scholarships, rankings, or awards.
+- DEDUPLICATION: If the same certification or achievement appears twice (e.g. once with and once without a year/parenthetical), include it ONLY ONCE — keep the more detailed version.
+- Never list the same item in both certifications and achievements.
 
 RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
@@ -401,8 +481,12 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw);
+    // Sanitize before returning and caching so dedup/classification always applies
+    if (parsed?.resume) {
+      parsed.resume = sanitizeResumeRecord(parsed.resume);
+    }
     pool.query(
-      "INSERT INTO cached_resume_parses (file_hash, result) VALUES ($1, $2) ON CONFLICT (file_hash) DO NOTHING",
+      "INSERT INTO cached_resume_parses (file_hash, result) VALUES ($1, $2) ON CONFLICT (file_hash) DO UPDATE SET result = EXCLUDED.result",
       [fileHash, JSON.stringify(parsed)]
     ).catch(() => {});
     return res.json(parsed);
