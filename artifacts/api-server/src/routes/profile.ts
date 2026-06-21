@@ -20,6 +20,18 @@ async function ensureProfileTables() {
       updated_at timestamp NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS user_resume_versions (
+      id serial PRIMARY KEY,
+      user_id text NOT NULL,
+      resume jsonb NOT NULL,
+      recommendations jsonb NOT NULL,
+      file_name text,
+      uploaded_at timestamp NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS user_resume_versions_user_idx
+      ON user_resume_versions (user_id, uploaded_at DESC);
+
     CREATE TABLE IF NOT EXISTS user_generated_resumes (
       id text PRIMARY KEY,
       user_id text NOT NULL,
@@ -248,20 +260,69 @@ router.put("/vault", async (req, res) => {
 
   try {
     await ensureProfileTables();
+    const sanitizedResume = JSON.stringify(sanitizeResumeRecord(resume));
+    const sanitizedRecs = JSON.stringify(recommendations);
+
+    // Upsert current profile (fast lookup for active session)
     await pool.query(
       `INSERT INTO user_resume_profiles (user_id, resume, recommendations, file_name, updated_at)
        VALUES ($1, $2::jsonb, $3::jsonb, $4, now())
        ON CONFLICT (user_id) DO UPDATE
-      SET resume = EXCLUDED.resume,
+       SET resume = EXCLUDED.resume,
            recommendations = EXCLUDED.recommendations,
            file_name = EXCLUDED.file_name,
            updated_at = now()`,
-      [user.id, JSON.stringify(sanitizeResumeRecord(resume)), JSON.stringify(recommendations), fileName],
+      [user.id, sanitizedResume, sanitizedRecs, fileName],
     );
+
+    // Append a new version row so every upload is preserved
+    await pool.query(
+      `INSERT INTO user_resume_versions (user_id, resume, recommendations, file_name, uploaded_at)
+       VALUES ($1, $2::jsonb, $3::jsonb, $4, now())`,
+      [user.id, sanitizedResume, sanitizedRecs, fileName],
+    );
+
     return res.json({ ok: true });
   } catch (err) {
     logger.error({ err, userId: user.id }, "Save user resume profile failed");
     return res.status(500).json({ error: "Could not save your profile." });
+  }
+});
+
+// GET /api/profile/vault/versions — full upload history for the signed-in user
+router.get("/vault/versions", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  try {
+    await ensureProfileTables();
+    const result = await pool.query(
+      `SELECT id, file_name, uploaded_at,
+              resume->>'name' AS candidate_name,
+              resume->>'email' AS email,
+              resume->>'phone' AS phone,
+              resume->>'location' AS location,
+              resume
+       FROM user_resume_versions
+       WHERE user_id = $1
+       ORDER BY uploaded_at DESC`,
+      [user.id],
+    );
+    return res.json({
+      versions: result.rows.map(row => ({
+        id: row.id,
+        fileName: row.file_name,
+        uploadedAt: row.uploaded_at,
+        candidateName: row.candidate_name,
+        email: row.email,
+        phone: row.phone,
+        location: row.location,
+        resume: sanitizeResumeRecord(row.resume),
+      })),
+    });
+  } catch (err) {
+    logger.error({ err, userId: user.id }, "Load resume versions failed");
+    return res.status(500).json({ error: "Could not load resume history." });
   }
 });
 
