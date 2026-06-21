@@ -96,7 +96,7 @@ interface PricingPlan {
 }
 
 const PRICING: PricingPlan[] = [
-  { id: null, credits: 5, price: "Free", label: "First 5 Resumes Free", popular: false },
+  { id: null, credits: 10, price: "Free", label: "First 10 Resumes Free", popular: false },
   { id: null, credits: 30, price: "$9.99", label: "30 resume credits", popular: true },
   { id: null, credits: 100, price: "$19.99", label: "100 resume credits", popular: false },
 ];
@@ -196,7 +196,7 @@ function HeroSection() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3 mb-8">
               <Link href="/app" className="btn-mint w-full sm:w-auto justify-center text-center" style={{ fontSize: "1rem", padding: "0.75rem 1.25rem" }}>
-                Tailor My First 5 Resumes Free <ArrowRight className="w-4 h-4" />
+                Tailor My First 10 Resumes Free <ArrowRight className="w-4 h-4" />
               </Link>
               <a href="#how-it-works" className="btn-outline-dark w-full sm:w-auto justify-center text-center" style={{ fontSize: "1rem", padding: "0.75rem 1.25rem" }}>
                 See how it works
@@ -219,7 +219,7 @@ function HeroSection() {
                 <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: "#F8F9FA" }}>
                   <div className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: "#00c447" }}>10</div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">5 tailored resumes generating</div>
+                    <div className="text-sm font-semibold truncate">10 tailored resumes generating</div>
                     <div className="truncate text-xs" style={{ color: "#888" }}>LinkedIn, Greenhouse, Lever, Indeed</div>
                   </div>
                   <div className="chip-mint shrink-0">Parallel</div>
@@ -508,7 +508,7 @@ function PricingSection() {
             Pay for outcomes,<br />not seats.
           </h2>
           <p className="text-lg" style={{ color: "#999" }}>
-            Start with 5 tailored resumes free, then buy 30 or 100 credits when you need more.
+            Start with 10 tailored resumes free, then buy 30 or 100 credits when you need more.
           </p>
         </div>
         <div className="grid md:grid-cols-3 gap-4 max-w-5xl mx-auto">
