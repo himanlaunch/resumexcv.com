@@ -196,7 +196,9 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
       degree: sanitizeResumeText(edu.degree),
       school: sanitizeResumeText(edu.school),
       year: sanitizeResumeText(edu.year),
+      location: sanitizeResumeText(edu.location),
     })),
+    achievements: (resume.achievements ?? []).map(sanitizeResumeText).filter(Boolean),
     certifications: (() => {
       const seen = new Set<string>();
       return (resume.certifications ?? [])

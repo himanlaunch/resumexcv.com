@@ -538,7 +538,7 @@ router.post("/tailor", async (req, res) => {
   }
 
   const tailorCacheKey = createHash("sha256")
-    .update(JSON.stringify(resume) + (job.id ?? job.title) + job.company)
+    .update(JSON.stringify(resume) + (job.id ?? job.title) + job.company + (job.description ?? "").slice(0, 500))
     .digest("hex")
     .slice(0, 40);
 
@@ -721,6 +721,9 @@ router.post("/ats-check", async (req, res) => {
 // POST /api/resume/suggest-gap-experience
 // Body: { resume: ResumeRecord, gapStart: string, gapEnd: string, durationMonths: number }
 router.post("/suggest-gap-experience", async (req, res) => {
+  const user = await getSupabaseUser(req);
+  if (!user) return res.status(401).json({ error: "Sign in to use this feature." });
+
   const { resume, gapStart, gapEnd, durationMonths } = req.body as {
     resume: ResumeRecord;
     gapStart: string;
@@ -795,6 +798,9 @@ Rules:
 // POST /api/resume/retry-change
 // Body: { resume: ResumeData, job: JobData, change: DiffRow }
 router.post("/retry-change", async (req, res) => {
+  const user = await getSupabaseUser(req);
+  if (!user) return res.status(401).json({ error: "Sign in to use this feature." });
+
   const { resume, job, change } = req.body as {
     resume: ResumeRecord;
     job: JobRecord;
@@ -843,6 +849,9 @@ Return JSON: { "proposed": "...", "rationale": "..." }`,
 // POST /api/resume/cover-letter  (streaming SSE)
 // Body: { resume: ResumeData, job: JobData }
 router.post("/cover-letter", async (req, res) => {
+  const user = await getSupabaseUser(req);
+  if (!user) return res.status(401).json({ error: "Sign in to generate a cover letter." });
+
   const { resume, job } = req.body as { resume: ResumeRecord; job: JobRecord };
 
   if (!resume || !job) return res.status(400).json({ error: "resume and job required" });

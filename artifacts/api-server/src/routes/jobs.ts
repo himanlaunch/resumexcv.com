@@ -5,6 +5,28 @@ import { logger } from "../lib/logger.js";
 import { pool } from "@workspace/db";
 import OpenAI from "openai";
 
+// SSRF guard — blocks requests to private/loopback IP ranges and non-http(s) schemes
+function isSafePublicUrl(rawUrl: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(rawUrl); } catch { return false; }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === "localhost" || host === "0.0.0.0") return false;
+  // Block IPv6 loopback / link-local
+  if (host === "::1" || host.startsWith("fe80:")) return false;
+  // Block RFC-1918 and link-local for IPv4
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const [, a, b] = ipv4.map(Number);
+    if (a === 10) return false;
+    if (a === 127) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+  }
+  return true;
+}
+
 const DEPLOYMENT = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5.5";
 const openai = new OpenAI({
   apiKey:
@@ -555,6 +577,7 @@ router.get("/autocomplete", async (req, res) => {
 router.get("/scrape", async (req, res) => {
   const url = req.query.url as string;
   if (!url) return res.status(400).json({ error: "url param required" });
+  if (!isSafePublicUrl(url)) return res.status(400).json({ error: "Invalid or disallowed URL" });
 
   try {
     // Use SerpAPI job details if we have a job_id
@@ -715,8 +738,8 @@ function extractFromUrlSlug(urlStr: string): { title: string; company: string; l
 // Falls back to URL slug parsing for JS-rendered SPA career sites.
 router.post("/from-url", async (req, res) => {
   const { url } = req.body as { url?: string };
-  if (!url || !/^https?:\/\//i.test(url)) {
-    return res.status(400).json({ error: "A valid URL starting with http:// or https:// is required" });
+  if (!url || !isSafePublicUrl(url)) {
+    return res.status(400).json({ error: "A valid public URL starting with http:// or https:// is required" });
   }
 
   const hostname = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } })();

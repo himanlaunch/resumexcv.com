@@ -22,7 +22,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { BrandLogo } from "@/components/BrandLogo";
 import { GapSuggestionPanel } from "@/components/GapSuggestionPanel";
-import { upsertCampaignFromJob } from "@/lib/campaigns";
+import { upsertCampaignFromJob, updateCampaignStatus, loadCampaigns, type CampaignStatus } from "@/lib/campaigns";
 import { sanitizeDiffChange, sanitizeResumeForExport, sanitizeResumeSkillText, sanitizeResumeText } from "@/lib/resumeSafety";
 
 type Step = 1 | 3 | 4 | 5;
@@ -806,7 +806,7 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
 
   const handleConfirm = () => {
     const skills = skillsText.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
-    onConfirm({ contact, summary: summary.trim(), skills, experience, education: parsed.education, certifications: parsed.certifications });
+    onConfirm({ contact, summary: summary.trim(), skills, experience, education: parsed.education, certifications: parsed.certifications, achievements: parsed.achievements ?? [] });
   };
 
   return (
@@ -1468,7 +1468,7 @@ const JOBS_PER_PAGE = 50;
 function getServerDateFilter(label: string | null): string | undefined {
   if (!label) return undefined;
   if (label === "3 days") return "3days";
-  if (label === "7 days") return "3days";
+  if (label === "7 days") return "week";
   if (label === "14 days") return "week";
   if (label === "30 days") return "month";
   return undefined; // 24 hr → client-side only
@@ -2860,6 +2860,11 @@ function buildPlainTextResume(a: ResumeData): string {
   lines.push("");
   lines.push("CERTIFICATIONS");
   for (const c of a.certifications ?? []) lines.push(`• ${c}`);
+  if (a.achievements && a.achievements.length > 0) {
+    lines.push("");
+    lines.push("ACHIEVEMENTS");
+    for (const ac of a.achievements) lines.push(`• ${ac}`);
+  }
   return lines.join("\n");
 }
 
@@ -3669,6 +3674,11 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
   const [saveNames, setSaveNames] = useState<Record<string, string>>({});
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set(savedVersionIds));
   const autoSavedJobIds = useRef<Set<string>>(new Set(savedVersionIds));
+  const [campaignStatuses, setCampaignStatuses] = useState<Record<string, string>>(() => {
+    if (!user?.id) return {};
+    const campaigns = loadCampaigns(user.id);
+    return Object.fromEntries(campaigns.map(c => [c.id, c.status ?? "Not Applied"]));
+  });
 
   const tailoredResumes = useMemo(() => {
     const out: Record<string, ResumeData> = {};
@@ -3778,9 +3788,11 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
   const handleShare = async (job: JobResult) => {
     if (sharing.has(job.id)) return;
     if (shareLinks[job.id]) {
-      await navigator.clipboard.writeText(shareLinks[job.id]).catch(() => {});
-      setLinkCopied(prev => new Set(prev).add(job.id));
-      setTimeout(() => setLinkCopied(prev => { const s = new Set(prev); s.delete(job.id); return s; }), 2000);
+      const copied = await navigator.clipboard.writeText(shareLinks[job.id]).then(() => true).catch(() => false);
+      if (copied) {
+        setLinkCopied(prev => new Set(prev).add(job.id));
+        setTimeout(() => setLinkCopied(prev => { const s = new Set(prev); s.delete(job.id); return s; }), 2000);
+      }
       return;
     }
     setSharing(prev => new Set(prev).add(job.id));
@@ -3789,8 +3801,8 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
       const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
       const url = `${base}/r/${id}`;
       setShareLinks(prev => ({ ...prev, [job.id]: url }));
-      await navigator.clipboard.writeText(url).catch(() => {});
-      setLinkCopied(prev => new Set(prev).add(job.id));
+      const copied = await navigator.clipboard.writeText(url).then(() => true).catch(() => false);
+      if (copied) setLinkCopied(prev => new Set(prev).add(job.id));
       setTimeout(() => setLinkCopied(prev => { const s = new Set(prev); s.delete(job.id); return s; }), 2000);
     } catch {
       // ignore
@@ -4033,7 +4045,16 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
                   <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: companyColor(job.company) }}>{job.company[0]}</div>
                   <span className="text-sm font-medium truncate max-w-[200px]" style={{ color: "#0A0A0A" }}>{job.title} @ {job.company}</span>
                 </div>
-                <select className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 outline-none cursor-pointer" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>
+                <select
+                  className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 outline-none cursor-pointer"
+                  style={{ backgroundColor: "#F0F0F0", color: "#555" }}
+                  value={campaignStatuses[job.id] ?? "Not Applied"}
+                  onChange={e => {
+                    const status = e.target.value;
+                    setCampaignStatuses(prev => ({ ...prev, [job.id]: status }));
+                    updateCampaignStatus(user?.id, job.id, status as CampaignStatus);
+                  }}
+                >
                   <option>Not Applied</option><option>Applied</option><option>Waiting</option>
                   <option>Interview</option><option>Offer</option><option>Rejected</option>
                 </select>

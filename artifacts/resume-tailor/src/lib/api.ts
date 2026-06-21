@@ -250,6 +250,7 @@ export async function parseResume(file: File): Promise<ParsedResumeResult> {
       experience: raw.resume?.experience ?? [],
       education: raw.resume?.education ?? [],
       certifications: raw.resume?.certifications ?? [],
+      achievements: raw.resume?.achievements ?? [],
     },
     recommendations: {
       titles: raw.recommendations?.titles ?? [],
