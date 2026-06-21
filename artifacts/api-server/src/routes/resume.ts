@@ -226,9 +226,8 @@ function sanitizeTailoringResult(result: TailoringResult): TailoringResult {
           ? sanitizeResumeSkillText(change.proposed)
           : sanitizeResumeText(change.proposed);
         // Gap rows must always be "confirm" so the user can Accept/Retry/Reject them
-        const status = change.gapType && change.gapType !== null && change.status !== "confirm"
-          ? "confirm"
-          : change.status;
+        const hasGap = change.gapType != null && change.gapType !== "null" && change.gapType !== "";
+        const status = hasGap && change.status !== "confirm" ? "confirm" : change.status;
         return { ...change, proposed, status };
       })
       .filter((change) => change.proposed || change.status !== "rewritten"),

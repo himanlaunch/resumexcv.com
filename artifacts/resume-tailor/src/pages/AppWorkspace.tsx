@@ -1448,7 +1448,7 @@ function normalizePlatformLabel(via: string) {
 function parsePostedAtHours(postedAt: string): number {
   const s = (postedAt ?? "").toLowerCase();
   const m = s.match(/(\d+)\+?\s*(minute|min|hour|hr|day|week|month)/);
-  if (!m) return 0; // "Recently" or unknown → treat as brand new, always pass filter
+  if (!m) return s.includes("recent") ? 0 : Infinity; // "Recently" → treat as brand-new; other unknowns → exclude
   const n = Number(m[1]);
   if (m[2].startsWith("minute") || m[2].startsWith("min")) return n / 60;
   if (m[2].startsWith("hour") || m[2].startsWith("hr"))    return n;
@@ -2374,8 +2374,8 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
             });
           }
         },
-        onError: (err) => {
-          if (/credit|buy credits|remaining/i.test(err ?? "")) onBuyCredits();
+        onError: (err, code) => {
+          if (code === "INSUFFICIENT_CREDITS" || /credit|buy credits|remaining/i.test(err ?? "")) onBuyCredits();
           setJobStates(prev => ({ ...prev, [job.id]: { ...prev[job.id], status: "error", error: err || "Tailoring failed" } }));
           void onCreditsUpdated();
         },
@@ -2444,10 +2444,14 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         const newSkills = text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
         projectedResume.skills = [...new Set([...(projectedResume.skills ?? []), ...newSkills])];
       } else {
-        // Experience bullet — append to relevant experience entry
+        // Experience bullet — use same fuzzy company matching as applyDiffs
+        const companyHint = row.section.replace(/^experience\s*[-–—:]\s*/i, "").trim().toLowerCase();
         projectedResume.experience = (projectedResume.experience ?? []).map(e => {
-          const sectionName = `Experience - ${e.company}`;
-          if (row.section !== sectionName) return e;
+          const eComp = e.company.toLowerCase();
+          const matches = companyHint
+            ? eComp.includes(companyHint) || companyHint.includes(eComp)
+            : false;
+          if (!matches) return e;
           const existingIdx = e.bullets?.findIndex(b => b === row.original);
           if (existingIdx !== undefined && existingIdx >= 0) {
             const bullets = [...(e.bullets ?? [])];
@@ -2567,37 +2571,58 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
             <button className="btn-outline-dark text-sm" onClick={onBuyCredits}>Buy credits</button>
           </div>
         )}
-        {(pendingCount > 0 || (allJobsDone && totalPendingAllJobs > 0 && pendingCount === 0)) && activeState?.status === "done" && (
-          <div className="mb-5 p-4 rounded-xl flex items-center justify-between gap-3 flex-wrap" style={{ backgroundColor: "#FFFBEB", border: "1px solid #FDE68A" }}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: "#D97706" }} />
-              <span className="text-sm font-semibold" style={{ color: "#92400E" }}>
-                {totalPendingAllJobs} item{totalPendingAllJobs > 1 ? "s" : ""} unreviewed across {selectedJobs.length > 1 ? "all jobs" : "this job"} — export blocked
-              </span>
+        {(pendingCount > 0 || (allJobsDone && totalPendingAllJobs > 0 && pendingCount === 0)) && activeState?.status === "done" && (() => {
+          const otherJobsWithPending = pendingCount === 0
+            ? selectedJobs.filter(j => j.id !== activeJobId && (jobStates[j.id]?.rows ?? []).some(r => r.status === "confirm" && !r.confirmed))
+            : [];
+          return (
+            <div className="mb-5 p-4 rounded-xl flex items-center justify-between gap-3 flex-wrap" style={{ backgroundColor: "#FFFBEB", border: "1px solid #FDE68A" }}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: "#D97706" }} />
+                <span className="text-sm font-semibold" style={{ color: "#92400E" }}>
+                  {pendingCount > 0
+                    ? `${pendingCount} item${pendingCount > 1 ? "s" : ""} need your review — export blocked`
+                    : `${totalPendingAllJobs} item${totalPendingAllJobs > 1 ? "s" : ""} unreviewed in other job${otherJobsWithPending.length > 1 ? "s" : ""} — export blocked`}
+                </span>
+                {otherJobsWithPending.length > 0 && (
+                  <span className="flex items-center gap-1 flex-wrap text-xs" style={{ color: "#92400E" }}>
+                    {otherJobsWithPending.map(j => (
+                      <button
+                        key={j.id}
+                        onClick={() => setActiveJobId(j.id)}
+                        className="underline font-medium"
+                        style={{ color: "#92400E" }}
+                      >
+                        {j.company}
+                      </button>
+                    ))}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {pendingCount > 0 && (
+                  <>
+                    <button
+                      onClick={() => handleConfirmAll(true)}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
+                      style={{ backgroundColor: "#00F0A0", color: "#003D29", border: "1px solid rgba(0,240,160,0.6)" }}
+                    >
+                      Accept all ({pendingCount})
+                    </button>
+                    <button
+                      onClick={() => handleConfirmAll(false)}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
+                      style={{ backgroundColor: "white", color: "#92400E", border: "1px solid #FDE68A" }}
+                    >
+                      Reject all
+                    </button>
+                  </>
+                )}
+                {pendingCount > 0 && <span className="text-xs font-medium" style={{ color: "#92400E" }}>{confirmedCount}/{totalConfirm} confirmed here</span>}
+              </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {pendingCount > 0 && (
-                <>
-                  <button
-                    onClick={() => handleConfirmAll(true)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
-                    style={{ backgroundColor: "#00F0A0", color: "#003D29", border: "1px solid rgba(0,240,160,0.6)" }}
-                  >
-                    Accept all ({pendingCount})
-                  </button>
-                  <button
-                    onClick={() => handleConfirmAll(false)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
-                    style={{ backgroundColor: "white", color: "#92400E", border: "1px solid #FDE68A" }}
-                  >
-                    Reject all
-                  </button>
-                </>
-              )}
-              <span className="text-xs font-medium" style={{ color: "#92400E" }}>{confirmedCount}/{totalConfirm} confirmed here</span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
         {allResolved && (
           <div className="mb-5 p-4 rounded-xl flex items-center justify-between gap-3 flex-wrap" style={{ backgroundColor: "#ECFFE0", border: "1px solid rgba(0,240,160,0.4)" }}>
             <div className="flex items-center gap-2">
@@ -2724,6 +2749,10 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
   const isPending = row.status === "confirm" && !row.confirmed;
   const [editText, setEditText] = useState(row.customText ?? row.proposed ?? "");
   const [editMode, setEditMode] = useState(false);
+  // Sync editText when a Retry completes and row.proposed changes (but not while user is actively editing)
+  useEffect(() => {
+    if (!editMode) setEditText(row.customText ?? row.proposed ?? "");
+  }, [row.proposed, row.customText, editMode]);
   const gapChip = row.gapType === "true_gap"
     ? <span className="chip-red text-xs">True gap</span>
     : row.gapType === "evidence"
@@ -2952,7 +2981,12 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
             `${edu.degree} from ${edu.school} (${edu.year})`,
           ].map(s => (s ?? "").trim().toLowerCase());
           if (candidates.some(c => c === normalOrig)) {
-            edu.degree = finalText;
+            // Update the field that best matches the original
+            const degreeMatch = (edu.degree ?? "").trim().toLowerCase() === normalOrig;
+            const schoolMatch = (edu.school ?? "").trim().toLowerCase() === normalOrig;
+            if (schoolMatch) edu.school = finalText;
+            else if (degreeMatch) edu.degree = finalText;
+            else edu.degree = finalText; // fallback
             break;
           }
         }
@@ -3077,6 +3111,7 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
 }
 
 async function handlePdfDownload(resume: ResumeData, job: JobResult) {
+  try {
   const { jsPDF } = await import("jspdf");
   resume = sanitizeResumeForExport(resume);
 
@@ -3283,6 +3318,10 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   }
 
   pdf.save(`${personName.replace(/\s+/g, "_")}_${job.company.replace(/\s+/g, "_")}.pdf`);
+  } catch (err) {
+    console.error("PDF generation failed", err);
+    alert("Could not generate PDF. Please try downloading as DOCX instead.");
+  }
 }
 
 async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> {
