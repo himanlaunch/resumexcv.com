@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { ArrowLeft, Plus, TrendingUp, FileText, Clock, Award, ExternalLink, Filter } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { BrandLogo } from "@/components/BrandLogo";
-import { loadCampaigns, updateCampaignName, updateCampaignStatus, type CampaignRecord, type CampaignStatus } from "@/lib/campaigns";
+import { loadCampaigns, syncCampaignsFromServer, updateCampaignName, updateCampaignStatus, type CampaignRecord, type CampaignStatus } from "@/lib/campaigns";
 
 const STATUS_STYLES: Record<CampaignStatus, { bg: string; text: string; dot: string }> = {
   "Not Applied": { bg: "#F3F4F6", text: "#374151", dot: "#9CA3AF" },
@@ -33,7 +33,10 @@ export default function Campaigns() {
   const [filterStatus, setFilterStatus] = useState<CampaignStatus | "All">("All");
 
   useEffect(() => {
-    setCampaigns(loadCampaigns(user?.id));
+    if (!user?.id) return;
+    // Show local data immediately, then refresh from server
+    setCampaigns(loadCampaigns(user.id));
+    void syncCampaignsFromServer(user.id).then(setCampaigns);
   }, [user?.id]);
 
   const updateStatus = (id: string, status: CampaignStatus) => {

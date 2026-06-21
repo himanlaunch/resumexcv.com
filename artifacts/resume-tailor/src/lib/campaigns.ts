@@ -1,5 +1,16 @@
 import type { JobResult } from "@/lib/api";
 
+const API_BASE = "/api";
+let _token: string | null = null;
+
+export function setCampaignAuthToken(token: string | null) {
+  _token = token;
+}
+
+function authHeaders(): HeadersInit {
+  return _token ? { Authorization: `Bearer ${_token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+}
+
 export type CampaignStatus = "Not Applied" | "Applied" | "Waiting" | "Interview" | "Offer" | "Rejected";
 
 export interface CampaignRecord {
@@ -47,6 +58,52 @@ export function persistCampaigns(userId: string, campaigns: CampaignRecord[]) {
   }
 }
 
+// Fetch campaigns from server and merge with localStorage (server wins on conflict).
+export async function syncCampaignsFromServer(userId: string): Promise<CampaignRecord[]> {
+  if (!_token) return loadCampaigns(userId);
+  try {
+    const res = await fetch(`${API_BASE}/profile/campaigns`, { headers: authHeaders() });
+    if (!res.ok) return loadCampaigns(userId);
+    const data = await res.json() as { campaigns: CampaignRecord[] };
+    const serverCampaigns = data.campaigns ?? [];
+    // Merge: server records take priority, then local-only records (not yet synced)
+    const serverIds = new Set(serverCampaigns.map(c => c.id));
+    const localOnly = loadCampaigns(userId).filter(c => !serverIds.has(c.id));
+    const merged = [...serverCampaigns, ...localOnly];
+    persistCampaigns(userId, merged);
+    // Push any local-only records to server
+    for (const c of localOnly) {
+      void syncCampaignToServer(c);
+    }
+    return merged;
+  } catch {
+    return loadCampaigns(userId);
+  }
+}
+
+async function syncCampaignToServer(campaign: CampaignRecord) {
+  if (!_token) return;
+  try {
+    await fetch(`${API_BASE}/profile/campaigns/${encodeURIComponent(campaign.id)}`, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        name: campaign.name,
+        jobTitle: campaign.jobTitle,
+        company: campaign.company,
+        version: campaign.version,
+        exportedDate: campaign.exportedDate,
+        status: campaign.status,
+        location: campaign.location,
+        salary: campaign.salary,
+        applyLink: campaign.applyLink,
+      }),
+    });
+  } catch {
+    // best-effort; localStorage copy is the fallback
+  }
+}
+
 export function upsertCampaignFromJob(userId: string | undefined | null, job: JobResult) {
   if (!userId) return;
   const existing = loadCampaigns(userId);
@@ -66,6 +123,7 @@ export function upsertCampaignFromJob(userId: string | undefined | null, job: Jo
     applyLink: job.applyLink,
   };
   persistCampaigns(userId, [next, ...existing.filter(record => record.id !== job.id)]);
+  void syncCampaignToServer(next);
 }
 
 export function updateCampaignStatus(userId: string | undefined | null, id: string, status: CampaignStatus) {
@@ -74,6 +132,8 @@ export function updateCampaignStatus(userId: string | undefined | null, id: stri
     record.id === id ? { ...record, status, updatedAt: Date.now() } : record
   );
   persistCampaigns(userId, updated);
+  const changed = updated.find(r => r.id === id);
+  if (changed) void syncCampaignToServer(changed);
   return updated;
 }
 
@@ -84,5 +144,7 @@ export function updateCampaignName(userId: string | undefined | null, id: string
     record.id === id ? { ...record, name: cleanName || `${record.company} - ${record.jobTitle}`, updatedAt: Date.now() } : record
   );
   persistCampaigns(userId, updated);
+  const changed = updated.find(r => r.id === id);
+  if (changed) void syncCampaignToServer(changed);
   return updated;
 }

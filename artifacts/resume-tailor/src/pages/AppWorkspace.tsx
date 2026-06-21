@@ -791,6 +791,143 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
   );
 }
 
+function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
+  parsed: ResumeData;
+  fileName: string | null;
+  onConfirm: (r: ResumeData) => void;
+  onRetry: () => void;
+}) {
+  const [contact, setContact] = useState({ ...parsed.contact });
+  const [summary, setSummary] = useState(parsed.summary ?? "");
+  const [skillsText, setSkillsText] = useState((parsed.skills ?? []).join(", "));
+  const [experience, setExperience] = useState(
+    (parsed.experience ?? []).map(e => ({ ...e, bullets: [...(e.bullets ?? [])] }))
+  );
+
+  const handleConfirm = () => {
+    const skills = skillsText.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+    onConfirm({ contact, summary: summary.trim(), skills, experience, education: parsed.education, certifications: parsed.certifications });
+  };
+
+  return (
+    <div className="flex-1 p-4 md:p-8 overflow-auto">
+      <div className="max-w-3xl mx-auto">
+        <div className="mb-6">
+          <div className="chip-mint inline-flex mb-3">Review Parsed Resume</div>
+          <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: "#0A0A0A" }}>Confirm your details</h1>
+          <p className="text-sm" style={{ color: "#666" }}>
+            {fileName ? `Parsed from "${fileName}". ` : ""}Fix anything that looks off before continuing.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          {/* Contact */}
+          <div className="card-base p-5 rounded-2xl">
+            <h3 className="font-semibold text-sm mb-3" style={{ color: "#0A0A0A" }}>Contact Information</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(["name", "email", "location", "linkedin", "github"] as const).map(field => (
+                <div key={field}>
+                  <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{field}</label>
+                  <input
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ border: "1px solid #E5E8EA", backgroundColor: "#FAFAFA", color: "#0A0A0A" }}
+                    value={(contact as any)[field] ?? ""}
+                    onChange={e => setContact(prev => ({ ...prev, [field]: e.target.value }))}
+                    placeholder={`Your ${field}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="card-base p-5 rounded-2xl">
+            <h3 className="font-semibold text-sm mb-3" style={{ color: "#0A0A0A" }}>Professional Summary</h3>
+            <textarea
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none"
+              style={{ border: "1px solid #E5E8EA", backgroundColor: "#FAFAFA", color: "#0A0A0A", minHeight: 80 }}
+              value={summary}
+              onChange={e => setSummary(e.target.value)}
+              placeholder="Brief professional summary…"
+            />
+          </div>
+
+          {/* Skills */}
+          <div className="card-base p-5 rounded-2xl">
+            <h3 className="font-semibold text-sm mb-1" style={{ color: "#0A0A0A" }}>Skills</h3>
+            <p className="text-xs mb-3" style={{ color: "#888" }}>Comma-separated list</p>
+            <textarea
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none font-mono"
+              style={{ border: "1px solid #E5E8EA", backgroundColor: "#FAFAFA", color: "#0A0A0A", minHeight: 64 }}
+              value={skillsText}
+              onChange={e => setSkillsText(e.target.value)}
+            />
+          </div>
+
+          {/* Experience — title/company/period editable */}
+          {experience.length > 0 && (
+            <div className="card-base p-5 rounded-2xl">
+              <h3 className="font-semibold text-sm mb-3" style={{ color: "#0A0A0A" }}>Experience ({experience.length} roles)</h3>
+              <div className="space-y-4">
+                {experience.map((exp, i) => (
+                  <div key={i} className="p-3 rounded-xl" style={{ backgroundColor: "#F8F9FA", border: "1px solid #EBEBEB" }}>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+                      {(["title", "company", "period"] as const).map(f => (
+                        <div key={f}>
+                          <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{f}</label>
+                          <input
+                            className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
+                            style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
+                            value={exp[f] ?? ""}
+                            onChange={e => setExperience(prev => prev.map((x, j) => j === i ? { ...x, [f]: e.target.value } : x))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {exp.bullets && exp.bullets.length > 0 && (
+                      <div className="mt-2">
+                        <div className="text-xs font-medium mb-1" style={{ color: "#888" }}>{exp.bullets.length} bullet{exp.bullets.length !== 1 ? "s" : ""} parsed</div>
+                        <ul className="space-y-1">
+                          {exp.bullets.map((b, bi) => (
+                            <li key={bi}>
+                              <input
+                                className="w-full px-2 py-1 rounded text-xs outline-none"
+                                style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#333" }}
+                                value={b}
+                                onChange={e => setExperience(prev => prev.map((x, j) => j === i
+                                  ? { ...x, bullets: x.bullets!.map((bx, bj) => bj === bi ? e.target.value : bx) }
+                                  : x
+                                ))}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button className="btn-dark" onClick={handleConfirm}>
+            Looks good — Continue
+          </button>
+          <button
+            className="px-4 py-2 rounded-xl text-sm font-medium"
+            style={{ backgroundColor: "#F2F4F5", color: "#555" }}
+            onClick={onRetry}
+          >
+            Re-upload
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, onParsed, onClear, onDeleteVersion, onNext, onDirectJobs, onUpdateResume }: {
   resume: ResumeData;
   savedData: SavedResumeData | null;
@@ -824,6 +961,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
   const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
   const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
   const [downloadingVersion, setDownloadingVersion] = useState<{ id: string; format: "pdf" | "docx" } | null>(null);
+  const [reviewing, setReviewing] = useState<{ resume: ResumeData; recommendations: ParsedResumeResult["recommendations"]; fileName: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -839,18 +977,25 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     try {
       setLoadingMsg("AI is parsing your resume…");
       const result = await parseResume(file);
-      onParsed(result.resume, result.recommendations, file.name);
-      setRecommendations(result.recommendations);
-      setSelectedTitles(new Set(result.recommendations.titles.slice(0, 3).map(t => t.title)));
-      if (result.recommendations.locations.length > 0) {
-        setSelectedLocations([result.recommendations.locations[0].label]);
-      }
-      setUploaded(true);
+      // Show review step before committing to vault
+      setReviewing({ resume: result.resume, recommendations: result.recommendations, fileName: file.name });
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Resume parsing failed. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmParsed = (editedResume: ResumeData) => {
+    if (!reviewing) return;
+    onParsed(editedResume, reviewing.recommendations, reviewing.fileName);
+    setRecommendations(reviewing.recommendations);
+    setSelectedTitles(new Set(reviewing.recommendations.titles.slice(0, 3).map(t => t.title)));
+    if (reviewing.recommendations.locations.length > 0) {
+      setSelectedLocations([reviewing.recommendations.locations[0].label]);
+    }
+    setReviewing(null);
+    setUploaded(true);
   };
 
   const handleClearAndReupload = () => {
@@ -938,6 +1083,17 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
       setDownloadingVersion(null);
     }
   };
+
+  if (reviewing) {
+    return (
+      <ParsedResumeReview
+        parsed={reviewing.resume}
+        fileName={reviewing.fileName}
+        onConfirm={confirmParsed}
+        onRetry={() => { setReviewing(null); setFileName(null); }}
+      />
+    );
+  }
 
   return (
     <div className="flex-1 p-4 md:p-8 overflow-auto">
