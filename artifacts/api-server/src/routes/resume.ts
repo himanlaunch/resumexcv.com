@@ -93,6 +93,23 @@ function normalizeResumeText(value: string): string {
     .trim();
 }
 
+// Regex-based contact field extraction — used as fallback when AI misses a field.
+// PDF text extraction sometimes reorders header lines; this catches the raw value directly.
+const PHONE_RE = /(?<!\d)(\+?1[\s.-]?)?(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})(?!\d)/;
+const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
+const LINKEDIN_RE = /(?:linkedin\.com\/in\/|linkedin\.com\/pub\/)([a-zA-Z0-9\-_%]+)/i;
+
+function extractContactFromText(text: string): { phone?: string; email?: string; linkedin?: string } {
+  const phoneMatch = PHONE_RE.exec(text);
+  const emailMatch = EMAIL_RE.exec(text);
+  const linkedinMatch = LINKEDIN_RE.exec(text);
+  return {
+    phone: phoneMatch ? phoneMatch[0].trim() : undefined,
+    email: emailMatch ? emailMatch[0].trim() : undefined,
+    linkedin: linkedinMatch ? `linkedin.com/in/${linkedinMatch[1]}` : undefined,
+  };
+}
+
 const LOCATION_ONLY_COUNTRIES = new Set([
   "india",
   "ireland",
@@ -418,6 +435,11 @@ router.post("/parse", upload.single("file"), async (req, res) => {
       const cachedResult = cached.rows[0].result;
       if (cachedResult?.resume) {
         cachedResult.resume = sanitizeResumeRecord(cachedResult.resume);
+        // Backfill contact fields the AI may have missed using regex on the raw text
+        const regexContact = extractContactFromText(text);
+        if (!cachedResult.resume.contact.phone && regexContact.phone) cachedResult.resume.contact.phone = regexContact.phone;
+        if (!cachedResult.resume.contact.email && regexContact.email) cachedResult.resume.contact.email = regexContact.email;
+        if (!cachedResult.resume.contact.linkedin && regexContact.linkedin) cachedResult.resume.contact.linkedin = regexContact.linkedin;
       }
       return res.json(cachedResult);
     }
@@ -484,6 +506,11 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
     // Sanitize before returning and caching so dedup/classification always applies
     if (parsed?.resume) {
       parsed.resume = sanitizeResumeRecord(parsed.resume);
+      // Backfill contact fields the AI may have missed using regex on the raw text
+      const regexContact = extractContactFromText(text);
+      if (!parsed.resume.contact.phone && regexContact.phone) parsed.resume.contact.phone = regexContact.phone;
+      if (!parsed.resume.contact.email && regexContact.email) parsed.resume.contact.email = regexContact.email;
+      if (!parsed.resume.contact.linkedin && regexContact.linkedin) parsed.resume.contact.linkedin = regexContact.linkedin;
     }
     pool.query(
       "INSERT INTO cached_resume_parses (file_hash, result) VALUES ($1, $2) ON CONFLICT (file_hash) DO UPDATE SET result = EXCLUDED.result",
