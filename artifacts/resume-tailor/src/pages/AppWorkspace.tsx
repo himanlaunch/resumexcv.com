@@ -825,7 +825,7 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
           <div className="card-base p-5 rounded-2xl">
             <h3 className="font-semibold text-sm mb-3" style={{ color: "#0A0A0A" }}>Contact Information</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(["name", "email", "location", "linkedin", "github"] as const).map(field => (
+              {(["name", "phone", "email", "location", "linkedin", "github"] as const).map(field => (
                 <div key={field}>
                   <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{field}</label>
                   <input
