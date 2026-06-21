@@ -2416,6 +2416,13 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
   // Compute projected match score based on which proposed changes are accepted.
   // Builds a virtual resume with accepted/confirmed proposed text, then re-runs computeMatchScore.
   const activeJob = selectedJobs.find(j => j.id === activeJobId);
+
+  // Baseline = token score of the original resume before any tailoring
+  const baselineScore = useMemo(() => {
+    if (!activeJob) return null;
+    return computeMatchScore(activeJob, resume);
+  }, [activeJob, resume]);
+
   const projectedScore = useMemo(() => {
     if (!activeJob || !activeState?.result) return null;
     // Build a projected resume by applying accepted rows
@@ -2606,21 +2613,21 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         {/* Match score + seniority */}
         {activeState?.result && (
           <div className="flex flex-wrap gap-3 mb-5">
-            {/* Projected score (live as user accepts/rejects) */}
-            {projectedScore !== null && (
-              <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl" style={{ border: projectedScore >= 85 ? "1.5px solid #00c447" : undefined }}>
+            {/* Match score: AI projected (primary) vs original baseline */}
+            {activeState.result.matchScore != null && baselineScore !== null && (
+              <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl" style={{ border: activeState.result.matchScore >= 85 ? "1.5px solid #00c447" : undefined }}>
                 <div>
-                  <div className="text-2xl font-bold font-heading" style={{ color: projectedScore >= 85 ? "#00c447" : projectedScore >= 70 ? "#D97706" : "#EF4444" }}>
-                    {projectedScore}%
+                  <div className="text-2xl font-bold font-heading" style={{ color: activeState.result.matchScore >= 85 ? "#00c447" : activeState.result.matchScore >= 70 ? "#D97706" : "#EF4444" }}>
+                    {activeState.result.matchScore}%
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: projectedScore >= 85 ? "#00c447" : "#888" }}>
-                    {projectedScore >= 85 ? "★ " : ""}Projected match
+                  <div className="text-xs mt-0.5" style={{ color: activeState.result.matchScore >= 85 ? "#00c447" : "#888" }}>
+                    {activeState.result.matchScore >= 85 ? "★ " : ""}Resume–Job Match
                   </div>
                 </div>
                 <div className="text-xs pl-3" style={{ borderLeft: "1px solid #E5E8EA", color: "#aaa" }}>
-                  Baseline<br />
-                  <span style={{ color: activeState.result.matchScore >= 80 ? "#00c447" : activeState.result.matchScore >= 65 ? "#D97706" : "#EF4444" }}>
-                    {activeState.result.matchScore}%
+                  Before tailoring<br />
+                  <span style={{ color: baselineScore >= 80 ? "#00c447" : baselineScore >= 65 ? "#D97706" : "#EF4444" }}>
+                    {baselineScore}%
                   </span>
                 </div>
               </div>
