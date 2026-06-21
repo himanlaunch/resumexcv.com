@@ -1609,7 +1609,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
       const result = await searchJobs(
         titles,
         location,
-        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: 3, platforms },
+        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: append ? 3 : 1, platforms },
         !append ? (job) => setJobs(prev => [...prev, job]) : undefined
       );
       if (append) {
@@ -1800,10 +1800,14 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
   if (activePlatforms.size > 0) filterParts.push([...activePlatforms].join(", "));
   if (timeFilter) filterParts.push(`within ${timeFilter}`);
   if (minScore > 0) filterParts.push(`${minScore}%+ match`);
+  const titlesDisplay = titles.length <= 3
+    ? titles.join(", ")
+    : `${titles.slice(0, 2).join(", ")} +${titles.length - 2} more`;
+  const locationDisplay = location.split("|").filter(Boolean).join(", ") || "all locations";
   const summaryLine = status === "idle"
-    ? `Ready to search live postings for "${titles.slice(0, 2).join(", ")}" in ${location}.`
+    ? `Ready to search live postings for "${titlesDisplay}" in ${locationDisplay}.`
     : status === "loading" && jobs.length === 0
-    ? `Fetching live postings for "${titles.slice(0, 2).join(", ")}"…`
+    ? `Searching ${titles.length} title${titles.length !== 1 ? "s" : ""} in ${locationDisplay}…`
     : status === "error"
     ? "Error fetching jobs"
     : [
@@ -1853,7 +1857,10 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
         {status === "loading" && jobs.length === 0 && (
           <div className="flex items-center gap-3 mb-5 p-4 rounded-xl" style={{ backgroundColor: "#ECFFE0", border: "1px solid rgba(0,240,160,0.3)" }}>
             <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />
-            <span className="text-sm font-medium" style={{ color: "#005A3D" }}>Searching</span>
+            <div>
+              <span className="text-sm font-medium" style={{ color: "#005A3D" }}>Searching {titles.length} title{titles.length !== 1 ? "s" : ""} in {locationDisplay}</span>
+              <p className="text-xs mt-0.5" style={{ color: "#007A50" }}>{titles.join(" · ")}</p>
+            </div>
           </div>
         )}
         {status === "error" && (
@@ -2106,16 +2113,36 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
           {jobs.length === 0 && status === "idle" && (
             <div className="text-center py-12" style={{ color: "#888" }}>
               <Search className="w-8 h-8 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">Search live jobs when you're ready</p>
-              <p className="text-xs mt-1" style={{ color: "#999" }}>SerpAPI will only run after you click Search live jobs.</p>
+              <p className="text-sm font-medium">Ready to search {titles.length} title{titles.length !== 1 ? "s" : ""} in {locationDisplay}</p>
+              <p className="text-xs mt-1" style={{ color: "#999" }}>{titles.join(" · ")}</p>
             </div>
           )}
 
           {jobs.length === 0 && status === "done" && (
-            <div className="text-center py-12" style={{ color: "#888" }}>
+            <div className="text-center py-12 px-4" style={{ color: "#888" }}>
               <Search className="w-8 h-8 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">No Google Jobs results found for this search</p>
-              <p className="text-xs mt-1" style={{ color: "#999" }}>Try a broader title, fewer keywords, or a wider location.</p>
+              <p className="text-sm font-medium mb-1">No jobs found for this search</p>
+              {location && !location.toLowerCase().includes("remote") && !location.toLowerCase().includes("united states") ? (
+                <>
+                  <p className="text-xs mb-4" style={{ color: "#999" }}>
+                    Google Jobs found 0 results for <strong>{locationDisplay}</strong>. Try broadening your search:
+                  </p>
+                  <ul className="text-xs space-y-1 mb-5 text-left inline-block" style={{ color: "#666" }}>
+                    <li>• Go back to Step 1 and add <strong>Remote (US)</strong> to your locations</li>
+                    <li>• Try a nearby larger city (e.g. Chicago, IL or New York, NY)</li>
+                    <li>• Remove the location filter to search nationally</li>
+                  </ul>
+                </>
+              ) : (
+                <p className="text-xs mb-4" style={{ color: "#999" }}>Try broader job titles or retry the search.</p>
+              )}
+              <button
+                className="text-xs font-semibold px-4 py-2 rounded-full transition-all"
+                style={{ backgroundColor: "#fff", color: "#0A0A0A", border: "1.5px solid #D0D5DD" }}
+                onClick={() => void handleSearch()}
+              >
+                Retry search
+              </button>
             </div>
           )}
         </div>
