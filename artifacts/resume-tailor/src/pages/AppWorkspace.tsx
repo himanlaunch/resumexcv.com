@@ -825,7 +825,7 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
           <div className="card-base p-5 rounded-2xl">
             <h3 className="font-semibold text-sm mb-3" style={{ color: "#0A0A0A" }}>Contact Information</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(["name", "email", "location", "linkedin", "github"] as const).map(field => (
+              {(["name", "phone", "email", "location", "linkedin", "github"] as const).map(field => (
                 <div key={field}>
                   <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{field}</label>
                   <input
@@ -2242,7 +2242,80 @@ interface JobTailoringState {
   error: string;
 }
 
-function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCredits, onCreditsUpdated, user, onAutoSave }: { selectedJobs: JobResult[]; resume: ResumeData; creditSkipNotice: string; onNext: (diffs: Record<string, DiffChange[]>) => void; onBuyCredits: () => void; onCreditsUpdated: () => Promise<CreditBalance | null>; user: { id: string } | null; onAutoSave: (version: SavedVersion) => void; }) {
+const ATS_EDITABLE_FIELDS: Record<string, { key: string; placeholder: string }> = {
+  "Phone number": { key: "phone", placeholder: "e.g. +1 555 123 4567" },
+  "LinkedIn URL": { key: "linkedin", placeholder: "e.g. linkedin.com/in/yourname" },
+  "Location": { key: "location", placeholder: "e.g. New York, NY" },
+};
+
+function ATSChecklistCard({ atsChecks, resume, onUpdateResume }: {
+  atsChecks: ATSCheck[];
+  resume: ResumeData;
+  onUpdateResume: (r: ResumeData) => void;
+}) {
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [savedFields, setSavedFields] = useState<Record<string, boolean>>({});
+
+  function handleSave(label: string) {
+    const field = ATS_EDITABLE_FIELDS[label];
+    if (!field) return;
+    const val = (editValues[label] ?? "").trim();
+    if (!val) return;
+    onUpdateResume({ ...resume, contact: { ...(resume.contact ?? {}), [field.key]: val } });
+    setSavedFields(prev => ({ ...prev, [label]: true }));
+  }
+
+  return (
+    <div className="card-base p-5 rounded-2xl">
+      <h3 className="font-heading font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "#0A0A0A" }}>
+        <Shield className="w-4 h-4" style={{ color: "#00c447" }} />
+        ATS Safety Checklist
+        <span className="text-xs font-normal" style={{ color: "#888" }}>— Real checks, no fake scores</span>
+      </h3>
+      <div className="space-y-3">
+        {atsChecks.map((c, i) => {
+          const editable = !c.ok && ATS_EDITABLE_FIELDS[c.label];
+          const field = editable ? ATS_EDITABLE_FIELDS[c.label] : null;
+          const isSaved = savedFields[c.label];
+          return (
+            <div key={i} className="flex items-start gap-3">
+              {(c.ok || isSaved) ? <Check className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "#22C55E" }} /> : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "#F59E0B" }} />}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium" style={{ color: (c.ok || isSaved) ? "#333" : "#92400E" }}>{c.label}{isSaved ? " ✓ added" : ""}</p>
+                {c.detail && !isSaved && <p className="text-xs mt-0.5" style={{ color: "#888" }}>{c.detail}</p>}
+                {editable && field && !isSaved && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="text"
+                      value={editValues[c.label] ?? ""}
+                      onChange={e => setEditValues(prev => ({ ...prev, [c.label]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === "Enter") handleSave(c.label); }}
+                      placeholder={field.placeholder}
+                      className="flex-1 text-xs px-3 py-1.5 rounded-lg border outline-none"
+                      style={{ borderColor: "#DDD", backgroundColor: "#FFF", color: "#333", minWidth: 0 }}
+                    />
+                    <button
+                      onClick={() => handleSave(c.label)}
+                      disabled={!(editValues[c.label] ?? "").trim()}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                      style={{
+                        backgroundColor: (editValues[c.label] ?? "").trim() ? "#00c447" : "#E5E7EB",
+                        color: (editValues[c.label] ?? "").trim() ? "#fff" : "#9CA3AF",
+                        cursor: (editValues[c.label] ?? "").trim() ? "pointer" : "not-allowed",
+                      }}
+                    >Save</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCredits, onCreditsUpdated, user, onAutoSave, onUpdateResume }: { selectedJobs: JobResult[]; resume: ResumeData; creditSkipNotice: string; onNext: (diffs: Record<string, DiffChange[]>) => void; onBuyCredits: () => void; onCreditsUpdated: () => Promise<CreditBalance | null>; user: { id: string } | null; onAutoSave: (version: SavedVersion) => void; onUpdateResume: (r: ResumeData) => void; }) {
   const [activeJobId, setActiveJobId] = useState<string>(selectedJobs[0]?.id ?? "");
   const [jobStates, setJobStates] = useState<Record<string, JobTailoringState>>(() =>
     Object.fromEntries(selectedJobs.map(j => [j.id, { status: "idle", statusMsg: "", result: null, rows: [], error: "" }]))
@@ -2566,24 +2639,7 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
 
         {/* ATS checks */}
         {atsChecks.length > 0 && (
-          <div className="card-base p-5 rounded-2xl">
-            <h3 className="font-heading font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "#0A0A0A" }}>
-              <Shield className="w-4 h-4" style={{ color: "#00c447" }} />
-              ATS Safety Checklist
-              <span className="text-xs font-normal" style={{ color: "#888" }}>— Real checks, no fake scores</span>
-            </h3>
-            <div className="space-y-3">
-              {atsChecks.map((c, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  {c.ok ? <Check className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "#22C55E" }} /> : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "#F59E0B" }} />}
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: c.ok ? "#333" : "#92400E" }}>{c.label}</p>
-                    {c.detail && <p className="text-xs mt-0.5" style={{ color: "#888" }}>{c.detail}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ATSChecklistCard atsChecks={atsChecks} resume={resume} onUpdateResume={onUpdateResume} />
         )}
       </div>
     </div>
@@ -4176,7 +4232,7 @@ export default function AppWorkspace() {
             )
             : selectedJobs.length === 0
               ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => setStep(3)} />
-              : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} user={user} onAutoSave={handleSaveVersion} />
+              : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} user={user} onAutoSave={handleSaveVersion} onUpdateResume={handleUpdateResume} />
         )}
         {step === 5 && (
           selectedJobs.length === 0
