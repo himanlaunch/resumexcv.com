@@ -299,6 +299,11 @@ ${malformedJson.slice(0, 50000)}`,
 
 // POST /api/resume/parse  (multipart/form-data — field: "file")
 router.post("/parse", upload.single("file"), async (req, res) => {
+  const user = await getSupabaseUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Sign in to parse your resume." });
+  }
+
   const file = req.file;
   if (!file) return res.status(400).json({ error: "No file uploaded. Send a resume file in the 'file' field." });
 

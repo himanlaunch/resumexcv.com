@@ -9,6 +9,8 @@ import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
 import Blog from "@/pages/Blog";
 import Admin from "@/pages/Admin";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
 const queryClient = new QueryClient();
@@ -65,6 +67,8 @@ function App() {
               <RequireAuth><Campaigns /></RequireAuth>
             </Route>
             <Route path="/r/:id" component={SharedResume} />
+            <Route path="/privacy" component={Privacy} />
+            <Route path="/terms" component={Terms} />
             <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </Switch>
