@@ -1,7 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { setApiAccessToken } from "@/lib/api";
+import { setApiAccessToken as _setApiToken } from "@/lib/api";
+import { setCampaignAuthToken } from "@/lib/campaigns";
+
+function setApiAccessToken(token: string | null) {
+  _setApiToken(token);
+  setCampaignAuthToken(token);
+}
 
 interface AuthContextValue {
   configured: boolean;
@@ -46,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!supabase) {
-      setApiAccessToken(null);
+      _setApiToken(null);
       setLoading(false);
       return;
     }
@@ -56,13 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       setSession(data.session ?? null);
-      setApiAccessToken(data.session?.access_token ?? null);
+      _setApiToken(data.session?.access_token ?? null);
       setLoading(false);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setApiAccessToken(nextSession?.access_token ?? null);
+      _setApiToken(nextSession?.access_token ?? null);
       setLoading(false);
     });
 
@@ -114,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase.auth.verifyOtp({ email, token, type });
         if (!error) {
           setSession(data.session ?? null);
-          setApiAccessToken(data.session?.access_token ?? null);
+          _setApiToken(data.session?.access_token ?? null);
           return;
         }
         lastError = error;
@@ -125,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase) return;
       await supabase.auth.signOut();
       setSession(null);
-      setApiAccessToken(null);
+      _setApiToken(null);
     },
   }), [loading, session]);
 

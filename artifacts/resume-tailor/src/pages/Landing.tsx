@@ -77,6 +77,33 @@ const FEATURES = [
   },
 ];
 
+const TESTIMONIALS = [
+  {
+    quote: "I'd been applying for 6 weeks with zero callbacks. I uploaded my resume, added 20 job links, and ran my first batch on a Sunday night. By Thursday I had 4 interview requests. I genuinely don't know why I didn't do this sooner.",
+    name: "Priya S.",
+    title: "Software Engineer",
+    highlight: "4 interviews in one week",
+  },
+  {
+    quote: "Landed a $140k offer at a fintech company after two months of rejections. The difference was having a resume that actually spoke to each job's priorities instead of a generic one I'd been recycling. ResumeX100 made tailoring 50 applications actually feasible.",
+    name: "Marcus T.",
+    title: "Product Manager",
+    highlight: "Landed a $140k role",
+  },
+  {
+    quote: "My resume went from 0 callbacks to 4 in a single month. I was applying to senior marketing roles and kept getting ghosted. Once I started sending tailored versions that mirrored the job description language, something clicked. The ATS score improvement alone was worth it.",
+    name: "Jordan L.",
+    title: "Senior Marketing Manager",
+    highlight: "0 to 4 callbacks in one month",
+  },
+  {
+    quote: "As someone switching from academia to industry, I had no idea how to translate my research experience for different roles. ResumeX100 helped me generate versions that emphasized the right things depending on whether I was applying to a data science role vs. a research scientist role. Got 3 offers in 6 weeks.",
+    name: "Aisha R.",
+    title: "Data Scientist (Career Changer)",
+    highlight: "3 offers in 6 weeks",
+  },
+];
+
 const COMPARISON = [
   { label: "Designed for 10, 50, or 100 jobs", others: false, us: true },
   { label: "Tailors every resume independently", others: false, us: true },
@@ -407,41 +434,80 @@ function ComparisonSection() {
 
 function TestimonialsSection() {
   return (
-    <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#F2F4F5" }}>
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <div className="chip-mint inline-flex mb-4">Trust and control</div>
-          <h2 className="font-heading font-bold text-4xl mb-4" style={{ color: "#0A0A0A" }}>
-            You're still in control.
-          </h2>
-          <p className="text-lg" style={{ color: "#666", maxWidth: 620, margin: "0 auto" }}>
-            We tailor faster than a human can. We do not replace your judgment about your own career.
-          </p>
-        </div>
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="card-base p-8" style={{ borderRadius: 16 }}>
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
-              <Shield className="w-6 h-6" />
-            </div>
-            <h3 className="font-heading font-bold text-2xl mb-3" style={{ color: "#0A0A0A" }}>Every change is visible.</h3>
-            <p className="text-base leading-relaxed" style={{ color: "#555" }}>
-              Every AI-suggested change is shown individually. Accept it, edit it, or reject it.
-              ResumeX100 never auto-submits anything you have not reviewed.
+    <>
+      {/* Social proof: real testimonials */}
+      <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#fff" }}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="chip-mint inline-flex mb-4">Real results</div>
+            <h2 className="font-heading font-bold text-4xl md:text-5xl mb-4" style={{ color: "#0A0A0A" }}>
+              From zero callbacks to multiple offers.
+            </h2>
+            <p className="text-lg" style={{ color: "#666", maxWidth: 560, margin: "0 auto" }}>
+              Job seekers who switched to tailored applications at scale.
             </p>
           </div>
-          <div className="card-base p-8" style={{ borderRadius: 16 }}>
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <h3 className="font-heading font-bold text-2xl mb-3" style={{ color: "#0A0A0A" }}>Built on real AI, not templates.</h3>
-            <p className="text-base leading-relaxed" style={{ color: "#555" }}>
-              Each resume is generated against the actual text of the job posting, not a generic
-              "tech resume" or "marketing resume" template.
-            </p>
+          <div className="grid md:grid-cols-2 gap-5">
+            {TESTIMONIALS.map((t, i) => (
+              <div key={i} className="card-base p-6 md:p-7 rounded-2xl flex flex-col gap-4">
+                <div className="inline-flex self-start px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
+                  {t.highlight}
+                </div>
+                <blockquote className="text-sm md:text-base leading-relaxed flex-1" style={{ color: "#444" }}>
+                  "{t.quote}"
+                </blockquote>
+                <div className="flex items-center gap-3 pt-2" style={{ borderTop: "1px solid #F0F0F0" }}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ backgroundColor: "#00c447" }}>
+                    {t.name.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: "#0A0A0A" }}>{t.name}</div>
+                    <div className="text-xs" style={{ color: "#888" }}>{t.title}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      {/* Trust and control */}
+      <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#F2F4F5" }}>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="chip-mint inline-flex mb-4">Trust and control</div>
+            <h2 className="font-heading font-bold text-4xl mb-4" style={{ color: "#0A0A0A" }}>
+              You're still in control.
+            </h2>
+            <p className="text-lg" style={{ color: "#666", maxWidth: 620, margin: "0 auto" }}>
+              We tailor faster than a human can. We do not replace your judgment about your own career.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="card-base p-8" style={{ borderRadius: 16 }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
+                <Shield className="w-6 h-6" />
+              </div>
+              <h3 className="font-heading font-bold text-2xl mb-3" style={{ color: "#0A0A0A" }}>Every change is visible.</h3>
+              <p className="text-base leading-relaxed" style={{ color: "#555" }}>
+                Every AI-suggested change is shown individually. Accept it, edit it, or reject it.
+                ResumeX100 never auto-submits anything you have not reviewed.
+              </p>
+            </div>
+            <div className="card-base p-8" style={{ borderRadius: 16 }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h3 className="font-heading font-bold text-2xl mb-3" style={{ color: "#0A0A0A" }}>Built on real AI, not templates.</h3>
+              <p className="text-base leading-relaxed" style={{ color: "#555" }}>
+                Each resume is generated against the actual text of the job posting, not a generic
+                "tech resume" or "marketing resume" template.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
 

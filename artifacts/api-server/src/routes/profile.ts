@@ -47,6 +47,26 @@ async function ensureProfileTables() {
 
     CREATE INDEX IF NOT EXISTS user_generated_resumes_user_saved_idx
       ON user_generated_resumes (user_id, saved_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_campaigns (
+      id text NOT NULL,
+      user_id text NOT NULL,
+      name text NOT NULL,
+      job_title text NOT NULL,
+      company text NOT NULL,
+      version text NOT NULL DEFAULT 'v1',
+      exported_date text,
+      status text NOT NULL DEFAULT 'Not Applied',
+      location text NOT NULL DEFAULT '',
+      salary text NOT NULL DEFAULT '',
+      apply_link text,
+      updated_at timestamp NOT NULL DEFAULT now(),
+      created_at timestamp NOT NULL DEFAULT now(),
+      PRIMARY KEY (id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS user_campaigns_user_idx
+      ON user_campaigns (user_id, updated_at DESC);
   `);
   ensured = true;
 }
@@ -448,6 +468,79 @@ router.delete("/generated-resumes/:id", async (req, res) => {
   } catch (err) {
     logger.error({ err, userId: user.id, id: req.params.id }, "Delete generated resume failed");
     return res.status(500).json({ error: "Could not delete saved resume." });
+  }
+});
+
+// ── Campaigns ──────────────────────────────────────────────────────────────
+
+router.get("/campaigns", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  try {
+    await ensureProfileTables();
+    const result = await pool.query(
+      `SELECT id, name, job_title, company, version, exported_date, status,
+              location, salary, apply_link, updated_at, created_at
+       FROM user_campaigns WHERE user_id = $1 ORDER BY updated_at DESC`,
+      [user.id],
+    );
+    return res.json({
+      campaigns: result.rows.map(r => ({
+        id: r.id,
+        userId: user.id,
+        name: r.name,
+        jobTitle: r.job_title,
+        company: r.company,
+        version: r.version,
+        exportedDate: r.exported_date ?? "",
+        status: r.status,
+        location: r.location,
+        salary: r.salary,
+        applyLink: r.apply_link,
+        updatedAt: new Date(r.updated_at).getTime(),
+      })),
+    });
+  } catch (err) {
+    logger.error({ err, userId: user.id }, "Load campaigns failed");
+    return res.status(500).json({ error: "Could not load campaigns." });
+  }
+});
+
+router.put("/campaigns/:id", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const { id } = req.params;
+  const { name, jobTitle, company, version, exportedDate, status, location, salary, applyLink } = req.body ?? {};
+  try {
+    await ensureProfileTables();
+    await pool.query(
+      `INSERT INTO user_campaigns (id, user_id, name, job_title, company, version, exported_date, status, location, salary, apply_link, updated_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now(),now())
+       ON CONFLICT (id, user_id) DO UPDATE SET
+         name = EXCLUDED.name, job_title = EXCLUDED.job_title,
+         company = EXCLUDED.company, version = EXCLUDED.version,
+         exported_date = EXCLUDED.exported_date, status = EXCLUDED.status,
+         location = EXCLUDED.location, salary = EXCLUDED.salary,
+         apply_link = EXCLUDED.apply_link, updated_at = now()`,
+      [id, user.id, name, jobTitle, company, version ?? "v1", exportedDate ?? null, status ?? "Not Applied", location ?? "", salary ?? "", applyLink ?? null],
+    );
+    return res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err, userId: user.id, id }, "Upsert campaign failed");
+    return res.status(500).json({ error: "Could not save campaign." });
+  }
+});
+
+router.delete("/campaigns/:id", async (req, res) => {
+  const user = await requireUser(req, res);
+  if (!user) return;
+  try {
+    await ensureProfileTables();
+    await pool.query(`DELETE FROM user_campaigns WHERE user_id = $1 AND id = $2`, [user.id, req.params.id]);
+    return res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err, userId: user.id, id: req.params.id }, "Delete campaign failed");
+    return res.status(500).json({ error: "Could not delete campaign." });
   }
 });
 
