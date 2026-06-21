@@ -2,7 +2,7 @@ import type { DiffChange, ResumeData } from "@/lib/api";
 
 const UNSAFE_RESUME_NOTE_PATTERNS = [
   /\bdo not\b/i,
-  /\bdon['’]t\b/i,
+  /\bdon[‘’]t\b/i,
   /\bunless\b/i,
   /\bwithout confirmation\b/i,
   /\bif accurate\b/i,
@@ -26,12 +26,22 @@ const UNSAFE_RESUME_NOTE_PATTERNS = [
   /\binclude\b.{0,80}\bbullet\b/i,
   /\bclaim\b.{0,80}\bownership\b/i,
   /\bflag\b.{0,80}\bgap\b/i,
+  // Parenthetical edit instructions that AI sometimes injects into proposed text
+  /\(edit to\b/i,
+  /\(add your\b/i,
+  /\(include your\b/i,
+  /\(replace with\b/i,
+  /\(insert your\b/i,
 ];
 
 function normalizeText(value: string): string {
   return value
+    // Replace em dashes (common AI writing pattern) with a comma or semicolon
+    .replace(/\s*—\s*/g, ", ")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
+    // Clean up any double commas left by the em dash replacement
+    .replace(/,\s*,/g, ",")
     .trim();
 }
 
@@ -53,6 +63,7 @@ const LOCATION_ONLY_COUNTRIES = new Set([
 ]);
 
 const LOCATION_ONLY_CITIES = new Set([
+  "remote",
   "dublin",
   "london",
   "toronto",
@@ -186,8 +197,22 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
       school: sanitizeResumeText(edu.school),
       year: sanitizeResumeText(edu.year),
     })),
-    certifications: (resume.certifications ?? [])
-      .map(sanitizeResumeText)
-      .filter(Boolean),
+    certifications: (() => {
+      const seen = new Set<string>();
+      return (resume.certifications ?? [])
+        .flatMap(cert =>
+          cert.includes(";")
+            ? cert.split(/\s*;\s*/).map(c => c.trim()).filter(Boolean)
+            : [cert]
+        )
+        .map(sanitizeResumeText)
+        .filter(Boolean)
+        .filter(cert => {
+          const key = cert.trim().toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    })(),
   };
 }

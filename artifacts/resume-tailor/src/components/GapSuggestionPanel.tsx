@@ -138,17 +138,18 @@ export function GapSuggestionPanel({ resume, onAddExperience }: Props) {
   }, []); // run once on mount
 
   const fetchSuggestion = useCallback(async (index: number) => {
+    let gap: DetectedGap | undefined;
     setGapStates(prev => {
-      const state = prev[index];
-      if (!state) return prev;
+      gap = prev[index]?.gap;
       return prev.map((s, i) => i === index ? { ...s, status: "loading", error: null } : s);
     });
-    // Read gap from state updater to avoid stale closure — pull it from the ref snapshot
-    const gap = gapStates[index]?.gap;
+    // Fallback: re-detect if state hasn't hydrated yet
+    if (!gap) gap = detectGaps(resume.experience)[index];
     if (!gap) return;
+    const capturedGap = gap;
     try {
       const suggestion = await suggestGapExperience(
-        resume, gap.gapStart, gap.gapEnd, gap.durationMonths
+        resume, capturedGap.gapStart, capturedGap.gapEnd, capturedGap.durationMonths
       );
       setGapStates(prev =>
         prev.map((s, i) => i === index ? { ...s, status: "ready", suggestion } : s)
@@ -162,7 +163,7 @@ export function GapSuggestionPanel({ resume, onAddExperience }: Props) {
         )
       );
     }
-  }, [gapStates, resume]);
+  }, [resume]);
 
   if (!initialized || gapStates.length === 0) return null;
 

@@ -262,32 +262,52 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits 
         >
           <Briefcase className="w-4 h-4" />Campaign Tracker
         </Link>
-        <button
-          onClick={onBuyCredits}
-          className="mt-2 w-full flex items-center justify-between gap-2 text-sm px-3 py-2 rounded-lg transition-colors"
-          style={{ color: "#B8C0C8", backgroundColor: "rgba(0,240,160,0.06)", border: "1px solid rgba(0,240,160,0.18)" }}
-        >
-          <span className="flex items-center gap-2"><Zap className="w-4 h-4" />Buy credits</span>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}>{credits?.balance ?? 0}</span>
-        </button>
-        <div className="mt-3 flex items-center gap-2 px-3 py-2">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs" style={{ backgroundColor: "#333", color: "#ccc" }}>
-            {initials || "U"}
+
+        {!user ? (
+          /* ── Promo sign-in block for signed-out users ── */
+          <div className="mt-3 rounded-xl p-3" style={{ backgroundColor: "rgba(0,240,160,0.08)", border: "1px solid rgba(0,240,160,0.22)" }}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Zap className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00F0A0" }} />
+              <span className="text-xs font-bold" style={{ color: "#00F0A0" }}>10 FREE credits — limited promo</span>
+            </div>
+            <p className="text-xs mb-2.5" style={{ color: "#8B949E" }}>Sign in to claim 10 free resume tailoring credits. No card required.</p>
+            <Link href="/signin"
+              className="block w-full text-center text-xs font-bold py-2 rounded-lg transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}
+            >
+              Sign in &amp; claim credits
+            </Link>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-semibold truncate" style={{ color: "#ccc" }}>{displayName}</div>
-            <div className="text-xs truncate" style={{ color: "#9CA3AF" }}>{displayEmail}</div>
-          </div>
-        </div>
-        <button
-          onClick={() => void signOut()}
-          className="w-full text-left text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
-          style={{ color: "#B8C0C8" }}
-          onMouseEnter={e => { e.currentTarget.style.color = "#FCA5A5"; e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.08)"; }}
-          onMouseLeave={e => { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; }}
-        >
-          Sign out
-        </button>
+        ) : (
+          <>
+            <button
+              onClick={onBuyCredits}
+              className="mt-2 w-full flex items-center justify-between gap-2 text-sm px-3 py-2 rounded-lg transition-colors"
+              style={{ color: "#B8C0C8", backgroundColor: "rgba(0,240,160,0.06)", border: "1px solid rgba(0,240,160,0.18)" }}
+            >
+              <span className="flex items-center gap-2"><Zap className="w-4 h-4" />Buy credits</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}>{credits?.balance ?? 0}</span>
+            </button>
+            <div className="mt-3 flex items-center gap-2 px-3 py-2">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs" style={{ backgroundColor: "#333", color: "#ccc" }}>
+                {initials || "U"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold truncate" style={{ color: "#ccc" }}>{displayName}</div>
+                <div className="text-xs truncate" style={{ color: "#9CA3AF" }}>{displayEmail}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => void signOut()}
+              className="w-full text-left text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+              style={{ color: "#B8C0C8" }}
+              onMouseEnter={e => { e.currentTarget.style.color = "#FCA5A5"; e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.08)"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; }}
+            >
+              Sign out
+            </button>
+          </>
+        )}
       </div>
     </aside>
   );
@@ -322,7 +342,7 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
 
   if (!open) return null;
   const paidPlans = plans
-    .filter(plan => plan.credits === 30 || plan.credits === 100 || plan.credits > 5)
+    .filter(plan => plan.credits >= 10)
     .sort((a, b) => a.credits - b.credits)
     .slice(0, 2);
   const displayPlans = paidPlans.length > 0
@@ -364,7 +384,7 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
         <div className="grid grid-cols-3 gap-2 mb-5">
           {[
             ["Balance", credits?.balance ?? 0],
-            ["Free used", `${credits?.freeUsed ?? 0}/${credits?.freeCredits ?? 5}`],
+            ["Free used", `${credits?.freeUsed ?? 0}/${credits?.freeCredits ?? 10}`],
             ["Purchased", credits?.totalPurchased ?? 0],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl p-3 text-center" style={{ backgroundColor: "#F8F9FA", border: "1px solid #E5E8EA" }}>
@@ -1246,24 +1266,29 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
 // ── Step 2: Job Discovery ─────────────────────────────────────────────────────
 
 const TIME_FILTERS = [
-  { label: "1 hr",     maxHours: 1 },
-  { label: "12 hr",    maxHours: 12 },
-  { label: "24 hr",    maxHours: 24 },
-  { label: "2 days",   maxHours: 48 },
-  { label: "7 days",   maxHours: 168 },
-  { label: "10 days",  maxHours: 240 },
-  { label: "14 days",  maxHours: 336 },
-  { label: "30 days",  maxHours: 720 },
-  { label: "2 months", maxHours: 1440 },
+  { label: "24 hr",   maxHours: 24 },
+  { label: "3 days",  maxHours: 72 },
+  { label: "7 days",  maxHours: 168 },
+  { label: "14 days", maxHours: 336 },
+  { label: "30 days", maxHours: 720 },
 ] as const;
 
 const FEATURED_PLATFORMS = ["LinkedIn", "Indeed", "Glassdoor", "Monster", "Dice", "ZipRecruiter"] as const;
 
 function normalizePlatformLabel(via: string) {
-  return (via || "Other")
+  let label = (via || "Other")
     .replace(/^via\s+/i, "")
+    // Strip "- SomeName" suffix after a domain-looking token
+    .replace(/[a-z0-9-]+\.[a-z]{2,}[^\s]*\s*[-–|]\s*/gi, "")
+    // Strip bare domain-looking tokens (e.g. "frontendnode-production.up.railway.app")
+    .replace(/\b[a-z0-9-]+\.(?:com|app|io|co|net|org|ai|jobs)\b/gi, "")
+    // Collapse pipes/dashes left behind
+    .replace(/\s*[|–-]+\s*$/, "")
     .replace(/\s+/g, " ")
-    .trim() || "Other";
+    .trim();
+  // Truncate very long labels
+  if (label.length > 24) label = label.slice(0, 22).trim() + "…";
+  return label || "Other";
 }
 
 function parsePostedAtHours(postedAt: string): number {
@@ -1288,10 +1313,11 @@ const JOBS_PER_PAGE = 50;
 // mapping it to "3days" would exclude 4–10 day postings.
 function getServerDateFilter(label: string | null): string | undefined {
   if (!label) return undefined;
+  if (label === "3 days") return "3days";
   if (label === "7 days") return "3days";
   if (label === "14 days") return "week";
-  if (label === "30 days" || label === "2 months") return "month";
-  return undefined; // 1 hr, 12 hr, 24 hr, 2 days, 10 days → client-side only
+  if (label === "30 days") return "month";
+  return undefined; // 24 hr → client-side only
 }
 
 // ── Match-score helpers ───────────────────────────────────────────────────────
@@ -1376,15 +1402,19 @@ function computeSkillGap(job: JobResult, resume: ResumeData): { matched: string[
 }
 
 function MatchBadge({ score }: { score: number }) {
-  const color = score >= 75 ? "#00c447" : score >= 55 ? "#F59E0B" : score >= 35 ? "#F97316" : "#9CA3AF";
-  const bg = score >= 75 ? "#ECFFE0" : score >= 55 ? "#FEF3C7" : score >= 35 ? "#FFF0E5" : "#F3F4F6";
+  const { color, bg, label } =
+    score >= 75 ? { color: "#00c447", bg: "#ECFFE0", label: "Strong" } :
+    score >= 55 ? { color: "#D97706", bg: "#FEF3C7", label: "Good" } :
+    score >= 35 ? { color: "#EA580C", bg: "#FFF0E5", label: "Fair" } :
+                  { color: "#9CA3AF", bg: "#F3F4F6", label: "Weak" };
   return (
     <span
+      title={`${score}% keyword match between your resume and this job`}
       className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
       style={{ backgroundColor: bg, color }}
     >
       <TrendingUp className="w-3 h-3" />
-      {score}%
+      {score}% · {label}
     </span>
   );
 }
@@ -1680,111 +1710,86 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
         )}
 
         {/* ── Filter toolbar (shown once first results arrive) ── */}
-        {jobs.length > 0 && (
-          <div className="rounded-2xl mb-5 p-4 space-y-3" style={{ backgroundColor: "#F8F8F8", border: "1px solid #EBEBEB" }}>
-            {/* Time filter */}
-            <div>
-              <p className="text-xs font-semibold mb-2" style={{ color: "#555" }}>Posted within</p>
-              <div className="flex gap-2 flex-wrap">
+        {jobs.length > 0 && (() => {
+          const activeFilterCount = (timeFilter ? 1 : 0) + activePlatforms.size + (minScore > 0 ? 1 : 0);
+          return (
+            <div className="rounded-2xl mb-5 p-4 space-y-3" style={{ backgroundColor: "#F8F8F8", border: "1px solid #EBEBEB" }}>
+              {/* Row 1: Posted within + Sort toggle */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Posted:</span>
+                  <button
+                    onClick={() => setTimeFilter(null)}
+                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                    style={{ backgroundColor: timeFilter === null ? "#00F0A0" : "#fff", color: timeFilter === null ? "#0A0A0A" : "#555", border: timeFilter === null ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                  >
+                    Any
+                  </button>
+                  {TIME_FILTERS.map(f => (
+                    <button key={f.label}
+                      onClick={() => setTimeFilter(prev => prev === f.label ? null : f.label)}
+                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      style={{ backgroundColor: timeFilter === f.label ? "#00F0A0" : "#fff", color: timeFilter === f.label ? "#0A0A0A" : "#555", border: timeFilter === f.label ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  onClick={() => setTimeFilter(null)}
-                  className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                  style={{
-                    backgroundColor: timeFilter === null ? "#00F0A0" : "#fff",
-                    color: timeFilter === null ? "#0A0A0A" : "#555",
-                    border: timeFilter === null ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                  }}
+                  onClick={() => setSortByMatch(v => !v)}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all flex-shrink-0"
+                  style={{ backgroundColor: sortByMatch ? "#0A0A0A" : "#fff", color: sortByMatch ? "#00F0A0" : "#555", border: sortByMatch ? "1.5px solid #0A0A0A" : "1.5px solid #D0D5DD" }}
                 >
-                  Any time
+                  <TrendingUp className="w-3 h-3" />
+                  {sortByMatch ? "Sorted by match" : "Sort by match"}
                 </button>
-                {TIME_FILTERS.map(f => (
+              </div>
+              {/* Row 2: Platform */}
+              {platformOptions.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Platform:</span>
                   <button
-                    key={f.label}
-                    onClick={() => setTimeFilter(prev => prev === f.label ? null : f.label)}
+                    onClick={() => setActivePlatforms(new Set())}
                     className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                    style={{
-                      backgroundColor: timeFilter === f.label ? "#00F0A0" : "#fff",
-                      color: timeFilter === f.label ? "#0A0A0A" : "#555",
-                      border: timeFilter === f.label ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                    }}
+                    style={{ backgroundColor: activePlatforms.size === 0 ? "#00F0A0" : "#fff", color: activePlatforms.size === 0 ? "#0A0A0A" : "#555", border: activePlatforms.size === 0 ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
                   >
-                    {f.label}
+                    All
                   </button>
-                ))}
-              </div>
-            </div>
-            {/* Platform filter */}
-            <div>
-              <p className="text-xs font-semibold mb-2" style={{ color: "#555" }}>Platform</p>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setActivePlatforms(new Set())}
-                  className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                  style={{
-                    backgroundColor: activePlatforms.size === 0 ? "#00F0A0" : "#fff",
-                    color: activePlatforms.size === 0 ? "#0A0A0A" : "#555",
-                    border: activePlatforms.size === 0 ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                  }}
-                >
-                  All
-                </button>
-                {platformOptions.map(({ label: p, count }) => (
-                  <button
-                    key={p}
-                    onClick={() => togglePlatform(p)}
-                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                    style={{
-                      backgroundColor: activePlatforms.has(p) ? "#00F0A0" : "#fff",
-                      color: activePlatforms.has(p) ? "#0A0A0A" : "#555",
-                      border: activePlatforms.has(p) ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                    }}
+                  {platformOptions.map(({ label: p, count }) => (
+                    <button key={p} onClick={() => togglePlatform(p)}
+                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      style={{ backgroundColor: activePlatforms.has(p) ? "#00F0A0" : "#fff", color: activePlatforms.has(p) ? "#0A0A0A" : "#555", border: activePlatforms.has(p) ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                    >
+                      {p} <span style={{ opacity: 0.6 }}>{count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Row 3: Match score + clear */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Match:</span>
+                  {[0, 40, 60, 75, 90].map(pct => (
+                    <button key={pct} onClick={() => setMinScore(pct)}
+                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      style={{ backgroundColor: minScore === pct ? "#00F0A0" : "#fff", color: minScore === pct ? "#0A0A0A" : "#555", border: minScore === pct ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
+                    >
+                      {pct === 0 ? "Any" : `${pct}%+`}
+                    </button>
+                  ))}
+                </div>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters}
+                    className="text-xs font-semibold flex items-center gap-1 flex-shrink-0"
+                    style={{ color: "#888" }}
                   >
-                    {p}{jobs.length > 0 ? ` ${count}` : ""}
+                    <X className="w-3 h-3" /> Clear {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""}
                   </button>
-                ))}
+                )}
               </div>
             </div>
-            {/* Minimum match score filter */}
-            <div>
-              <p className="text-xs font-semibold mb-2" style={{ color: "#555" }}>Minimum match</p>
-              <div className="flex gap-2 flex-wrap">
-                {[0, 40, 60, 75, 90].map(pct => (
-                  <button
-                    key={pct}
-                    onClick={() => setMinScore(pct)}
-                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
-                    style={{
-                      backgroundColor: minScore === pct ? "#00F0A0" : "#fff",
-                      color: minScore === pct ? "#0A0A0A" : "#555",
-                      border: minScore === pct ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD",
-                    }}
-                  >
-                    {pct === 0 ? "Any" : `${pct}%+`}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Sort by match */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1" style={{ borderTop: "1px solid #E5E5E5" }}>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-3.5 h-3.5" style={{ color: "#888" }} />
-                <p className="text-xs font-semibold" style={{ color: "#555" }}>Sort by resume match</p>
-              </div>
-              <button
-                onClick={() => setSortByMatch(v => !v)}
-                className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full transition-all w-full sm:w-auto"
-                style={{
-                  backgroundColor: sortByMatch ? "#0A0A0A" : "#fff",
-                  color: sortByMatch ? "#00F0A0" : "#555",
-                  border: sortByMatch ? "1.5px solid #0A0A0A" : "1.5px solid #D0D5DD",
-                }}
-              >
-                <TrendingUp className="w-3 h-3" />
-                {sortByMatch ? "Sorted by match" : "Sort by match"}
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Select all row ── */}
         {visibleJobs.length > 0 && (
@@ -1803,7 +1808,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
               >
                 {allVisibleSelected && <Check className="w-3 h-3" style={{ color: "#0A0A0A" }} />}
               </div>
-              {allVisibleSelected ? `Deselect page ${pageJobs.length}` : `Select page ${pageJobs.length}`}
+              {allVisibleSelected ? `Deselect all (${pageJobs.length})` : `Select all (${pageJobs.length})`}
             </button>
             <div className="flex items-center gap-3 flex-wrap">
               {selected.size > 0 && (
@@ -2571,48 +2576,68 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
     } else if (sec.includes("skill")) {
       const finalSkills = sanitizeResumeSkillText(rawText);
       if (finalSkills.length === 0) continue;
+      const normalOrig = (row.original ?? "").trim().toLowerCase();
       if (isInsertion) {
         for (const skill of finalSkills) {
-          if (!result.skills!.includes(skill)) result.skills!.push(skill);
+          if (!result.skills!.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())) {
+            result.skills!.push(skill);
+          }
         }
       } else {
-        const idx = result.skills!.findIndex(s => s === row.original);
+        const idx = result.skills!.findIndex(s => s.trim().toLowerCase() === normalOrig);
         if (idx >= 0) {
           result.skills!.splice(idx, 1, ...finalSkills);
         } else {
           for (const skill of finalSkills) {
-            if (!result.skills!.includes(skill)) result.skills!.push(skill);
+            if (!result.skills!.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())) {
+              result.skills!.push(skill);
+            }
           }
         }
       }
 
     } else if (sec.includes("certification")) {
+      // Split multi-cert proposals — AI sometimes joins all certs with semicolons
+      const certItems = rawText.split(/\s*;\s*/).map(c => sanitizeResumeText(c)).filter(Boolean);
+      const normalOrig = (row.original ?? "").trim().toLowerCase();
       if (isInsertion) {
-        if (!result.certifications!.includes(finalText)) result.certifications!.push(finalText);
+        for (const cert of certItems) {
+          if (!result.certifications!.some(c => c.trim().toLowerCase() === cert.trim().toLowerCase())) {
+            result.certifications!.push(cert);
+          }
+        }
       } else {
-        const idx = result.certifications!.findIndex(c => c === row.original);
-        if (idx >= 0) result.certifications![idx] = finalText;
-        else if (!result.certifications!.includes(finalText)) result.certifications!.push(finalText);
+        const idx = result.certifications!.findIndex(c => c.trim().toLowerCase() === normalOrig);
+        if (idx >= 0 && certItems.length === 1) {
+          result.certifications![idx] = certItems[0];
+        } else {
+          for (const cert of certItems) {
+            if (!result.certifications!.some(c => c.trim().toLowerCase() === cert.trim().toLowerCase())) {
+              result.certifications!.push(cert);
+            }
+          }
+        }
       }
 
     } else if (sec.includes("education")) {
       if (isInsertion) {
         result.education!.push({ degree: finalText, school: "", year: "" });
       } else {
-        let matched = false;
+        const normalOrig = (row.original ?? "").trim().toLowerCase();
         for (const edu of result.education ?? []) {
-          if (
-            edu.degree === row.original ||
-            edu.school === row.original ||
-            `${edu.degree}, ${edu.school}` === row.original ||
-            `${edu.degree} from ${edu.school}` === row.original
-          ) {
+          const candidates = [
+            edu.degree,
+            edu.school,
+            `${edu.degree}, ${edu.school}`,
+            `${edu.degree} from ${edu.school}`,
+            `${edu.degree} from ${edu.school} (${edu.year})`,
+          ].map(s => (s ?? "").trim().toLowerCase());
+          if (candidates.some(c => c === normalOrig)) {
             edu.degree = finalText;
-            matched = true;
             break;
           }
         }
-        if (!matched) result.education!.push({ degree: finalText, school: "", year: "" });
+        // No-match: skip silently — inserting a ghost entry is worse than missing an update
       }
 
     } else {
@@ -3023,17 +3048,36 @@ async function handleDocxDownload(resume: ResumeData, job: JobResult) {
 }
 
 function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; tailored: ResumeData; rows: DiffChange[] }) {
-  const changedOriginals = new Set(
-    rows
-      .filter(r => r.status === "rewritten" && r.original && r.original !== "[Not in resume]")
-      .map(r => r.original)
-  );
-  const changedNewTexts = new Set(
-    rows
-      .filter(r => r.status === "rewritten")
-      .map(r => (r.customText ?? r.proposed).trim())
-  );
-  const changedCount = rows.filter(r => r.status === "rewritten").length;
+  const rewrittenRows = rows.filter(r => r.status === "rewritten");
+
+  // Build Sets of every string that styleFn() will be called with so highlights work
+  // across all section types (bullets, skills, certs, education "degree, school")
+  const changedOriginals = new Set<string>();
+  const changedNewTexts = new Set<string>();
+  for (const r of rewrittenRows) {
+    if (r.original && r.original !== "[Not in resume]") {
+      const orig = r.original.trim();
+      changedOriginals.add(orig);
+      // Education originals arrive as "degree from school (year)" — also add "degree, school" format
+      // so styleFn(`${e.degree}, ${e.school}`) matches
+      if (r.section === "Education") {
+        const fromMatch = orig.match(/^(.+?) from (.+?)(?:\s*\(\d{4}\))?\s*$/);
+        if (fromMatch) {
+          const deg = fromMatch[1].trim();
+          const sch = fromMatch[2].trim();
+          changedOriginals.add(`${deg}, ${sch}`);
+          changedOriginals.add(deg);
+        }
+      }
+    }
+    const proposed = (r.customText ?? r.proposed ?? "").trim();
+    // Skills and certs can be semicolon/comma-joined — add each token individually
+    for (const tok of proposed.split(/\s*[,;]\s*/).map(t => t.trim()).filter(Boolean)) {
+      changedNewTexts.add(tok);
+    }
+    changedNewTexts.add(proposed);
+  }
+  const changedCount = rewrittenRows.length;
 
   const sectionHdr = (title: string) => (
     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase" as const, color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>
@@ -3745,6 +3789,24 @@ export default function AppWorkspace() {
     <div className="flex min-h-screen" style={{ backgroundColor: "#F2F4F5" }}>
       <Sidebar step={step} setStep={setStep} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} />
       <main className="flex-1 min-h-screen overflow-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
+        {/* Promo banner for signed-out users */}
+        {!user && !authLoading && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5"
+            style={{ backgroundColor: "#052e16", borderBottom: "1px solid rgba(0,240,160,0.2)" }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <Zap className="w-4 h-4 flex-shrink-0" style={{ color: "#00F0A0" }} />
+              <span className="text-sm font-semibold" style={{ color: "#A7F3D0" }}>
+                Limited promo: Sign in to get <strong style={{ color: "#00F0A0" }}>10 free resume credits</strong> — no card required.
+              </span>
+            </div>
+            <Link href="/signin"
+              className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}
+            >
+              Sign in free
+            </Link>
+          </div>
+        )}
         {step === 1 && (
           <Step1Vault key={savedData?.fileName ?? user?.id ?? "local-vault"} resume={resume} savedData={savedData} savedVersions={savedVersions} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} onParsed={handleParsed} onClear={handleClear} onDeleteVersion={handleDeleteVersion} onDirectJobs={(jobs) => { void handleJobsReady(jobs); }} onUpdateResume={handleUpdateResume} onNext={(titles, locations) => {
             setSearchTitles(titles);
@@ -3758,9 +3820,27 @@ export default function AppWorkspace() {
             onNext={(jobs) => { void handleJobsReady(jobs); }} />
         )}
         {step === 4 && (
-          selectedJobs.length === 0
-            ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => setStep(3)} />
-            : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} />
+          !user
+            ? (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center max-w-sm">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: "#ECFFE0" }}>
+                    <Zap className="w-8 h-8" style={{ color: "#00c447" }} />
+                  </div>
+                  <h2 className="font-heading font-bold text-xl mb-2" style={{ color: "#0A0A0A" }}>Sign in to tailor your resume</h2>
+                  <p className="text-sm mb-1" style={{ color: "#666" }}>
+                    Create a free account and get <strong>10 resume credits</strong> — enough to tailor 10 jobs.
+                  </p>
+                  <p className="text-xs mb-6" style={{ color: "#9CA3AF" }}>No credit card required. Limited promo offer.</p>
+                  <Link href="/signin" className="btn-mint inline-flex items-center gap-2">
+                    Sign in &amp; claim 10 free credits <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+            )
+            : selectedJobs.length === 0
+              ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => setStep(3)} />
+              : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} />
         )}
         {step === 5 && (
           selectedJobs.length === 0

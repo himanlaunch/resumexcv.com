@@ -433,16 +433,20 @@ router.post("/tailor", async (req, res) => {
 
     sendEvent({ type: "status", message: "Generating tailored changes…" });
 
-    const stream = await openai.chat.completions.create({
-      model: DEPLOYMENT,
-      max_completion_tokens: MAX_TAILORING_TOKENS,
-      messages: [
-        { role: "system", content: SYSTEM_TAILORING },
-        { role: "user", content: prompt },
-      ],
-      stream: true,
-      response_format: { type: "json_object" },
-    });
+    const stream = await openai.chat.completions.create(
+      {
+        model: DEPLOYMENT,
+        max_completion_tokens: MAX_TAILORING_TOKENS,
+        messages: [
+          { role: "system", content: SYSTEM_TAILORING },
+          { role: "user", content: prompt },
+        ],
+        stream: true,
+        response_format: { type: "json_object" },
+      },
+      // Abort the streaming request if the model hasn't finished in 90s
+      { signal: AbortSignal.timeout(90_000) },
+    );
 
     let fullText = "";
     let finishReason = "";
@@ -476,7 +480,7 @@ router.post("/tailor", async (req, res) => {
 
     sendEvent({ type: "result", data: parsed });
     sendEvent({ type: "done" });
-  } catch (err) {
+  } catch (err: any) {
     if (creditHold) {
       await refundResumeCredit(user.id, creditSourceId, creditHold.consumedFree, {
         jobId: job.id,
@@ -485,13 +489,37 @@ router.post("/tailor", async (req, res) => {
         reason: err instanceof Error ? err.message : String(err),
       }).catch(refundErr => logger.error({ refundErr, userId: user.id }, "Credit refund failed"));
     }
-    logger.error({ err }, "Resume tailor error");
-    const message = err instanceof SyntaxError
-      ? "Resume generation returned incomplete data. Please retry this job."
-      : err instanceof Error
-        ? err.message
-        : String(err);
-    sendEvent({ type: "error", error: message });
+
+    // Azure OpenAI quota / rate-limit errors — surface a friendly message and
+    // tell the client how long to wait so it can show a retry countdown.
+    const isRateLimit = err?.status === 429 || err?.constructor?.name === "RateLimitError" || /rate.?limit/i.test(err?.message ?? "");
+    const isTimeout = err?.name === "TimeoutError" || err?.code === "ETIMEDOUT" || /timeout/i.test(err?.message ?? "");
+
+    if (isRateLimit) {
+      logger.warn({ userId: user.id, jobId: job.id }, "Azure OpenAI rate limit on tailor");
+      const retryAfter = err?.headers?.["retry-after"] ?? "30";
+      sendEvent({
+        type: "error",
+        error: "The AI service is busy right now. Please wait a moment and retry this job.",
+        code: "AI_RATE_LIMITED",
+        retryAfter: Number(retryAfter),
+      });
+    } else if (isTimeout) {
+      logger.warn({ userId: user.id }, "Tailor request timed out");
+      sendEvent({
+        type: "error",
+        error: "The request timed out. Please retry this job.",
+        code: "AI_TIMEOUT",
+      });
+    } else {
+      logger.error({ err }, "Resume tailor error");
+      const message = err instanceof SyntaxError
+        ? "Resume generation returned incomplete data. Please retry this job."
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      sendEvent({ type: "error", error: message });
+    }
   } finally {
     res.end();
   }

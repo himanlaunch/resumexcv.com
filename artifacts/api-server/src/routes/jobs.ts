@@ -181,33 +181,84 @@ router.get("/search", async (req, res) => {
     const fetchPage = async (city: string, nextPageToken?: string): Promise<SerpResponse> => {
       const r = await fetch(`https://serpapi.com/search?${buildParams(city, nextPageToken)}`);
       if (!r.ok) {
-        const text = await r.text();
+        const text = await r.text().catch(() => "");
+        if (r.status === 429) {
+          logger.warn({ city }, "SerpAPI rate limit hit");
+          throw Object.assign(new Error("SerpAPI rate limit"), { status: 429, retryAfter: r.headers.get("retry-after") ?? "60" });
+        }
+        if (r.status === 401 || r.status === 403) {
+          logger.error({ city, status: r.status }, "SerpAPI auth/quota error");
+          throw Object.assign(new Error("SerpAPI quota exceeded"), { status: r.status });
+        }
         logger.warn({ city, status: r.status, text }, "SerpAPI page error");
         return { jobs_results: [], serpapi_pagination: undefined, error: undefined };
       }
       return r.json() as Promise<SerpResponse>;
     };
 
-    const cityResults = await Promise.all(
-      searchCities.map(async (city) => {
-        const responses: SerpResponse[] = [];
-        let nextPageToken = cursorTokens[city];
+    const indeedFromage = chipsValue === "date_posted:today" ? "1"
+      : chipsValue === "date_posted:3days" ? "3"
+      : chipsValue === "date_posted:week" ? "7"
+      : chipsValue === "date_posted:month" ? "30"
+      : "";
 
-        for (let page = 0; page < pageBatchSize; page++) {
-          const data = await fetchPage(city, nextPageToken);
-          responses.push(data);
+    const [cityResults, indeedJobs] = await Promise.all([
+      // Google Jobs — paginated, per city
+      Promise.all(
+        searchCities.map(async (city) => {
+          const responses: SerpResponse[] = [];
+          let nextPageToken = cursorTokens[city];
 
-          const nextToken = data.serpapi_pagination?.next_page_token;
-          if (!nextToken) {
-            nextPageToken = undefined;
-            break;
+          for (let page = 0; page < pageBatchSize; page++) {
+            const data = await fetchPage(city, nextPageToken);
+            responses.push(data);
+
+            const nextToken = data.serpapi_pagination?.next_page_token;
+            if (!nextToken) {
+              nextPageToken = undefined;
+              break;
+            }
+            nextPageToken = nextToken;
           }
-          nextPageToken = nextToken;
-        }
 
-        return { city, responses, nextPageToken };
-      })
-    );
+          return { city, responses, nextPageToken };
+        })
+      ),
+      // Indeed — one page per city, best-effort supplement
+      Promise.all(
+        searchCities.map(async (city, ci) => {
+          try {
+            const p = new URLSearchParams({
+              engine: "indeed_jobs",
+              q: hasRemote ? `${query} remote` : query,
+              l: city === "United States" ? "" : city,
+              api_key: SERPAPI_KEY!,
+              ...(indeedFromage ? { fromage: indeedFromage } : {}),
+            });
+            const r = await fetch(`https://serpapi.com/search?${p}`);
+            if (!r.ok) return [];
+            const d = await r.json() as { jobs_results?: any[] };
+            return (d.jobs_results ?? []).map((j: any, idx: number) => ({
+              id: j.job_id ?? j.id ?? `indeed-${ci}-${start}-${idx}`,
+              title: j.title ?? "",
+              company: j.company_name ?? "",
+              location: j.location ?? "",
+              via: "Indeed",
+              description: (j.description ?? "").slice(0, 800),
+              highlights: [],
+              postedAt: j.date ?? "Recently",
+              salary: j.salary ?? null,
+              remote: /remote/i.test(j.location ?? ""),
+              scheduleType: j.job_type ?? "Full-time",
+              applyLink: j.link ?? null,
+            }));
+          } catch {
+            return [];
+          }
+        })
+      ).then((rs) => rs.flat()),
+    ]);
+
     const responses = cityResults.flatMap((r) => r.responses);
 
     // SerpAPI reports no Google Jobs matches as an `error`; treat that as
@@ -236,6 +287,16 @@ router.get("/search", async (req, res) => {
         .map((j, idx) => mapJob(j, `job-${responseIdx}-${start}-${idx}`))
     );
 
+    // Append Indeed jobs that aren't already represented in Google Jobs results
+    for (const ij of indeedJobs) {
+      const key = ["job", normalizeJobText(ij.title), normalizeJobText(ij.company), normalizeJobText(ij.location), normalizeJobText(ij.via)].join(":");
+      if (!seenIds.has(ij.id) && !seenKeys.has(key)) {
+        if (ij.id) seenIds.add(ij.id);
+        seenKeys.add(key);
+        jobs.push(ij);
+      }
+    }
+
     const nextTokens = Object.fromEntries(
       cityResults
         .filter((r) => r.nextPageToken)
@@ -258,7 +319,23 @@ router.get("/search", async (req, res) => {
       pagesFetched,
       pageSize: SERPAPI_PAGE_SIZE,
     });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.status === 429) {
+      logger.warn({ retryAfter: err.retryAfter }, "SerpAPI rate limit — returning 429 to client");
+      res.setHeader("Retry-After", err.retryAfter ?? "60");
+      return res.status(429).json({
+        error: "Job search is temporarily rate-limited. Please wait a moment and try again.",
+        code: "SERPAPI_RATE_LIMITED",
+        retryAfter: Number(err.retryAfter ?? 60),
+      });
+    }
+    if (err?.status === 401 || err?.status === 403) {
+      logger.error({ status: err.status }, "SerpAPI quota exhausted");
+      return res.status(503).json({
+        error: "Job search is temporarily unavailable. Please try again later.",
+        code: "SERPAPI_QUOTA_EXCEEDED",
+      });
+    }
     logger.error({ err }, "Job search error");
     return res.status(500).json({ error: "Internal error during job search" });
   }

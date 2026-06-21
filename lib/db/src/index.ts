@@ -43,7 +43,7 @@ export const pool = connectionString
   ? new Pool({
       connectionString: sanitizedConnectionString,
       ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
-      max: Number(process.env.POSTGRES_POOL_MAX ?? 5),
+      max: Number(process.env.POSTGRES_POOL_MAX ?? 50),
       connectionTimeoutMillis: 8000,
       idleTimeoutMillis: 10000,
     })
