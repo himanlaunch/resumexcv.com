@@ -37,7 +37,9 @@ STRICT RULES — you must follow these without exception:
 5. Use strong action verbs and quantify impact where evidence already exists in the resume.
 6. Optimize keyword density for ATS without keyword stuffing.
 7. The "proposed" field must contain FINAL RESUME TEXT ONLY — one or two polished bullet-point sentences ready to paste into a resume. Never include reasoning, caveats, instructions, validation notes, "do not", "unless confirmed", "if accurate", or any meta-commentary in proposed text. Put explanations only in "gapNote".
-8. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.`;
+8. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.
+9. NEVER copy job description sentences verbatim into proposed bullets. Always rephrase in the candidate's voice, grounded in their actual experience.
+10. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const MAX_RESUME_PARSE_CHARS = 24000;
@@ -220,6 +222,7 @@ function sanitizeResumeRecord(resume: ResumeRecord): ResumeRecord {
   return {
     contact: {
       name: sanitizeResumeText(resume.contact?.name),
+      phone: sanitizeResumeText(resume.contact?.phone),
       email: sanitizeResumeText(resume.contact?.email),
       location: sanitizeResumeText(resume.contact?.location),
       linkedin: sanitizeResumeText(resume.contact?.linkedin),
@@ -233,15 +236,18 @@ function sanitizeResumeRecord(resume: ResumeRecord): ResumeRecord {
     experience: (resume.experience ?? []).map((exp) => ({
       title: sanitizeResumeText(exp.title),
       company: sanitizeResumeText(exp.company),
+      location: sanitizeResumeText(exp.location),
       period: sanitizeResumeText(exp.period),
       bullets: (exp.bullets ?? []).map(sanitizeResumeText).filter((bullet) => !isLocationOnlyBullet(bullet)).filter(Boolean),
     })),
     education: (resume.education ?? []).map((edu) => ({
       degree: sanitizeResumeText(edu.degree),
       school: sanitizeResumeText(edu.school),
+      location: sanitizeResumeText(edu.location),
       year: sanitizeResumeText(edu.year),
     })),
     certifications: (resume.certifications ?? []).map(sanitizeResumeText).filter(Boolean),
+    achievements: (resume.achievements ?? []).map(sanitizeResumeText).filter(Boolean),
   };
 }
 
@@ -692,7 +698,9 @@ router.post("/cover-letter", async (req, res) => {
           role: "system",
           content: `You are an expert cover letter writer. Write a concise, honest, 3-paragraph cover letter.
 Do NOT fabricate any experience. Only use information from the provided resume.
-Write in first person, professional tone. No fluff. No "I am writing to express my interest" openers.
+Write in first person, professional tone.
+BANNED OPENERS AND PHRASES — never use: "I am writing to", "I am excited to", "I am passionate about", "I would be a great fit", "dynamic team", "I am a passionate", "seasoned professional", "results-driven", "spearheaded", "orchestrated", "leveraged", "synergized", "thought leader", "innovative", "proactive", "game-changer", "detail-oriented", "go-getter".
+Open with a concrete accomplishment or direct statement of what you bring, not a generic interest statement.
 Output plain text only — no JSON, no markdown.`,
         },
         {
@@ -758,13 +766,15 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
 
 RESUME:
 Name: ${resume.contact?.name ?? ""}
+Phone: ${resume.contact?.phone ?? ""}
 Location: ${resume.contact?.location ?? ""}
 Summary: ${resume.summary ?? ""}
 Skills: ${resume.skills?.join(", ") ?? ""}
 Experience:
-${resume.experience?.map((e) => `- ${e.title} at ${e.company} (${e.period})\n  ${e.bullets?.join("\n  ") ?? ""}`).join("\n") ?? ""}
-Education: ${resume.education?.map((e) => `${e.degree} from ${e.school} (${e.year})`).join("; ") ?? ""}
+${resume.experience?.map((e) => `- ${e.title} at ${e.company}${e.location ? ` (${e.location})` : ""} (${e.period})\n  ${e.bullets?.join("\n  ") ?? ""}`).join("\n") ?? ""}
+Education: ${resume.education?.map((e) => `${e.degree} from ${e.school}${e.location ? `, ${e.location}` : ""} (${e.year})`).join("; ") ?? ""}
 Certifications: ${resume.certifications?.join(", ") ?? ""}
+Achievements: ${resume.achievements?.join(" | ") ?? ""}
 
 JOB:
 Title: ${job.title}
@@ -830,12 +840,13 @@ Check ALL of: contact completeness, standard section headers (Summary/Skills/Exp
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ResumeRecord {
-  contact?: { name?: string; email?: string; location?: string; linkedin?: string; github?: string };
+  contact?: { name?: string; phone?: string; email?: string; location?: string; linkedin?: string; github?: string };
   summary?: string;
   skills?: string[];
-  experience?: { title: string; company: string; period: string; bullets?: string[] }[];
-  education?: { degree: string; school: string; year: string }[];
+  experience?: { title: string; company: string; location?: string; period: string; bullets?: string[] }[];
+  education?: { degree: string; school: string; location?: string; year: string }[];
   certifications?: string[];
+  achievements?: string[];
 }
 
 interface JobRecord {
