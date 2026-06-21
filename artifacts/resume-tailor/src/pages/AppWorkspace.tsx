@@ -2061,7 +2061,7 @@ interface JobTailoringState {
   error: string;
 }
 
-function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCredits, onCreditsUpdated }: { selectedJobs: JobResult[]; resume: ResumeData; creditSkipNotice: string; onNext: (diffs: Record<string, DiffChange[]>) => void; onBuyCredits: () => void; onCreditsUpdated: () => Promise<CreditBalance | null> }) {
+function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCredits, onCreditsUpdated, user, onAutoSave }: { selectedJobs: JobResult[]; resume: ResumeData; creditSkipNotice: string; onNext: (diffs: Record<string, DiffChange[]>) => void; onBuyCredits: () => void; onCreditsUpdated: () => Promise<CreditBalance | null>; user: { id: string } | null; onAutoSave: (version: SavedVersion) => void; }) {
   const [activeJobId, setActiveJobId] = useState<string>(selectedJobs[0]?.id ?? "");
   const [jobStates, setJobStates] = useState<Record<string, JobTailoringState>>(() =>
     Object.fromEntries(selectedJobs.map(j => [j.id, { status: "idle", statusMsg: "", result: null, rows: [], error: "" }]))
@@ -2105,6 +2105,20 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
             [job.id]: { status: "done", statusMsg: "", result: cleanResult, rows: cleanChanges, error: "" },
           }));
           void onCreditsUpdated();
+          // Auto-save immediately so the record exists even if user never reaches Step 5
+          if (user) {
+            onAutoSave({
+              id: `auto-${job.id}`,
+              name: `${job.company} — ${job.title}`,
+              resume: applyDiffs(resume, cleanChanges),
+              job,
+              jobTitle: job.title,
+              jobCompany: job.company,
+              diffChanges: cleanChanges,
+              sourceJobId: job.id,
+              savedAt: Date.now(),
+            });
+          }
         },
         onError: (err) => {
           if (/credit|buy credits|remaining/i.test(err ?? "")) onBuyCredits();
@@ -3840,7 +3854,7 @@ export default function AppWorkspace() {
             )
             : selectedJobs.length === 0
               ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => setStep(3)} />
-              : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} />
+              : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} user={user} onAutoSave={handleSaveVersion} />
         )}
         {step === 5 && (
           selectedJobs.length === 0
