@@ -356,7 +356,7 @@ export async function searchJobs(
 export interface TailorCallbacks {
   onStatus?: (msg: string) => void;
   onResult?: (result: TailoringResult) => void;
-  onError?: (msg: string) => void;
+  onError?: (msg: string, code?: string) => void;
 }
 
 export async function tailorResume(
@@ -396,10 +396,11 @@ export async function tailorResume(
           message?: string;
           data?: TailoringResult;
           error?: string;
+          code?: string;
         };
         if (event.type === "status" && event.message) callbacks.onStatus?.(event.message);
         if (event.type === "result" && event.data) callbacks.onResult?.(event.data);
-        if (event.type === "error") callbacks.onError?.(event.error ?? event.message ?? "Unknown error");
+        if (event.type === "error") callbacks.onError?.(event.error ?? event.message ?? "Unknown error", event.code);
       } catch {
         // partial JSON chunk — skip
       }

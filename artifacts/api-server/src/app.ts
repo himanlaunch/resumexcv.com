@@ -113,6 +113,36 @@ const coverLimiter = rateLimit({
   message: rateLimitResponse("RATE_LIMITED_COVER"),
 });
 
+// /api/resume/retry-change — AI retry: 30 per minute per user
+const retryLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyGenerator: rateLimitKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: rateLimitResponse("RATE_LIMITED_RETRY"),
+});
+
+// /api/resume/suggest-gap-experience — AI call: 20 per minute per user
+const gapSuggestLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyGenerator: rateLimitKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: rateLimitResponse("RATE_LIMITED_GAP"),
+});
+
+// /api/jobs/scrape and /api/jobs/from-url — outbound fetch: 30 per minute per user
+const jobFetchLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyGenerator: rateLimitKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: rateLimitResponse("RATE_LIMITED_SCRAPE"),
+});
+
 app.use(express.json({
   limit: "50kb",
   verify(req, _res, buf) {
@@ -127,7 +157,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/resume/tailor", tailorLimiter);
 app.use("/api/resume/parse", parseLimiter);
 app.use("/api/resume/cover-letter", coverLimiter);
+app.use("/api/resume/retry-change", retryLimiter);
+app.use("/api/resume/suggest-gap-experience", gapSuggestLimiter);
 app.use("/api/jobs/search", jobsLimiter);
+app.use("/api/jobs/scrape", jobFetchLimiter);
+app.use("/api/jobs/from-url", jobFetchLimiter);
 
 app.use("/api", router);
 
