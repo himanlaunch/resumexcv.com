@@ -1029,13 +1029,15 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     const q = customTitleInput.trim();
     if (!q || q.length < 2) { setRoleApiSuggestions([]); return; }
     roleDebounceRef.current = setTimeout(async () => {
+      const localCount = allRoleSuggestions.filter(t => t.toLowerCase().includes(q.toLowerCase())).length;
+      if (localCount >= 4) { setRoleApiSuggestions([]); return; }
       setRoleApiLoading(true);
       const results = await autocompleteRole(q);
       setRoleApiSuggestions(results);
       setRoleApiLoading(false);
     }, 400);
     return () => { if (roleDebounceRef.current) clearTimeout(roleDebounceRef.current); };
-  }, [customTitleInput]);
+  }, [customTitleInput, allRoleSuggestions]);
 
   const roleSuggestions = useMemo(() => {
     const q = customTitleInput.trim().toLowerCase();

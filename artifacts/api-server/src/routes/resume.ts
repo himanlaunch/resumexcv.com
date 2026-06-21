@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { Router } from "express";
+import { createHash } from "crypto";
 import OpenAI from "openai";
 import { logger } from "../lib/logger.js";
 import multer from "multer";
@@ -43,7 +44,6 @@ STRICT RULES — you must follow these without exception:
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const MAX_RESUME_PARSE_CHARS = 24000;
-const MAX_TAILORING_TOKENS = 12000;
 
 function cleanJsonText(text: string): string {
   return text
@@ -254,7 +254,6 @@ function sanitizeResumeRecord(resume: ResumeRecord): ResumeRecord {
 async function repairTailoringJson(malformedJson: string, parseError: unknown): Promise<TailoringResult> {
   const completion = await openai.chat.completions.create({
     model: DEPLOYMENT,
-    max_completion_tokens: MAX_TAILORING_TOKENS,
     messages: [
       {
         role: "system",
@@ -331,6 +330,18 @@ router.post("/parse", upload.single("file"), async (req, res) => {
     return res.status(400).json({ error: "No text found in the file. Make sure it is not a scanned-image PDF." });
   }
 
+  const fileHash = createHash("sha256").update(file.buffer).digest("hex");
+
+  try {
+    await ensureParseCacheTable();
+    const cached = await pool.query("SELECT result FROM cached_resume_parses WHERE file_hash = $1", [fileHash]);
+    if (cached.rows.length > 0) {
+      return res.json(cached.rows[0].result);
+    }
+  } catch {
+    // Cache lookup failure is non-fatal — fall through to AI parse
+  }
+
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
@@ -385,6 +396,10 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw);
+    pool.query(
+      "INSERT INTO cached_resume_parses (file_hash, result) VALUES ($1, $2) ON CONFLICT (file_hash) DO NOTHING",
+      [fileHash, JSON.stringify(parsed)]
+    ).catch(() => {});
     return res.json(parsed);
   } catch (aiErr) {
     logger.error({ aiErr }, "AI resume parsing failed");
@@ -404,6 +419,32 @@ router.post("/tailor", async (req, res) => {
   const user = await getSupabaseUser(req);
   if (!user) {
     return res.status(401).json({ error: "Sign in to tailor resumes." });
+  }
+
+  const tailorCacheKey = createHash("sha256")
+    .update(JSON.stringify(resume) + (job.id ?? job.title) + job.company)
+    .digest("hex")
+    .slice(0, 40);
+
+  try {
+    await ensureTailorCacheTable();
+    const cached = await pool.query(
+      "SELECT result FROM cached_tailoring_results WHERE cache_key = $1 AND expires_at > NOW()",
+      [tailorCacheKey]
+    );
+    if (cached.rows.length > 0) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
+      res.write(`data: ${JSON.stringify({ type: "status", message: "Loading cached result…" })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "result", data: cached.rows[0].result })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "done" })}\n\n`);
+      res.end();
+      return;
+    }
+  } catch {
+    // Cache lookup failure — proceed with AI call
   }
 
   let creditHold: { consumedFree: boolean } | null = null;
@@ -448,7 +489,6 @@ router.post("/tailor", async (req, res) => {
     const stream = await openai.chat.completions.create(
       {
         model: DEPLOYMENT,
-        max_completion_tokens: MAX_TAILORING_TOKENS,
         messages: [
           { role: "system", content: SYSTEM_TAILORING },
           { role: "user", content: prompt },
@@ -487,8 +527,15 @@ router.post("/tailor", async (req, res) => {
     sendEvent({ type: "status", message: "Checking ATS compliance…" });
 
     // Enrich with ATS check
-    const atsResult = await runATSCheck(resume, parsed.changes ?? []);
+    const atsResult = runATSCheck(resume, parsed.changes ?? []);
     parsed.atsChecks = atsResult;
+
+    // Cache the result for 48 hours
+    const tailorExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    pool.query(
+      "INSERT INTO cached_tailoring_results (cache_key, result, expires_at) VALUES ($1, $2, $3) ON CONFLICT (cache_key) DO UPDATE SET result = $2, expires_at = $3",
+      [tailorCacheKey, JSON.stringify(parsed), tailorExpiry]
+    ).catch(() => {});
 
     sendEvent({ type: "result", data: parsed });
     sendEvent({ type: "done" });
@@ -547,7 +594,7 @@ router.post("/ats-check", async (req, res) => {
   if (!resume) return res.status(400).json({ error: "resume required" });
 
   try {
-    const checks = await runATSCheck(resume, changes ?? []);
+    const checks = runATSCheck(resume, changes ?? []);
     return res.json({ checks });
   } catch (err) {
     logger.error({ err }, "ATS check error");
@@ -788,53 +835,54 @@ Critical output rule: "proposed" is inserted into the user's resume if accepted.
 Produce ONLY the JSON object. No markdown fences. No extra commentary.`;
 }
 
-async function runATSCheck(resume: ResumeRecord, changes: DiffChange[]): Promise<ATSCheck[]> {
-  const skillsSample = (resume.skills ?? []).slice(0, 20).join(", ");
-  const bulletsSample = (resume.experience ?? [])
-    .flatMap(e => (e.bullets ?? []).slice(0, 3))
-    .slice(0, 12)
-    .join(" | ");
-  const periods = (resume.experience ?? []).map(e => e.period ?? "").filter(Boolean).join(", ");
-  const summary = (resume.summary ?? "").slice(0, 300);
-  const rolesWithBullets = (resume.experience ?? []).filter(e => e.bullets && e.bullets.length > 0).length;
-  const allRoles = resume.experience?.length ?? 0;
+function runATSCheck(resume: ResumeRecord, changes: DiffChange[]): ATSCheck[] {
+  const checks: ATSCheck[] = [];
 
-  const completion = await openai.chat.completions.create({
-    model: DEPLOYMENT,
-    max_completion_tokens: 900,
-    messages: [
-      {
-        role: "system",
-        content: `You are an ATS (Applicant Tracking System) compliance expert.
-Return ONLY a JSON object with a "checks" array. Each check: { "ok": boolean, "category": string, "label": string, "detail": string }.
-Be specific — reference actual content from the resume, not generic advice.`,
-      },
-      {
-        role: "user",
-        content: `Audit this resume for ATS compliance. Return {"checks": [...]}.
+  // Contact completeness
+  const hasName = !!resume.contact?.name?.trim();
+  const hasEmail = !!resume.contact?.email?.trim();
+  const hasLocation = !!resume.contact?.location?.trim();
+  const hasLinkedIn = !!resume.contact?.linkedin?.trim();
+  const hasPhone = !!resume.contact?.phone?.trim();
+  checks.push({ ok: hasName && hasEmail, category: "Contact", label: "Name & Email", detail: hasName && hasEmail ? "Name and email are present." : `Missing: ${!hasName ? "name" : ""}${!hasName && !hasEmail ? ", " : ""}${!hasEmail ? "email" : ""}.` });
+  checks.push({ ok: hasPhone, category: "Contact", label: "Phone number", detail: hasPhone ? "Phone number present." : "Phone number missing — many ATS systems require it." });
+  checks.push({ ok: hasLocation, category: "Contact", label: "Location", detail: hasLocation ? `Location: ${resume.contact!.location}` : "Location missing. ATS often filters by location." });
+  checks.push({ ok: hasLinkedIn, category: "Contact", label: "LinkedIn URL", detail: hasLinkedIn ? "LinkedIn URL present." : "No LinkedIn URL detected." });
 
-CONTACT: name=${resume.contact?.name ?? "(missing)"}, email=${resume.contact?.email ?? "(missing)"}, location=${resume.contact?.location ?? "(missing)"}, linkedin=${resume.contact?.linkedin ?? "(missing)"}
-SUMMARY (first 300 chars): ${summary || "(none)"}
-SKILLS: ${skillsSample || "(none)"}
-EXPERIENCE: ${allRoles} roles, ${rolesWithBullets} have bullet points
-DATE FORMATS USED: ${periods || "(none)"}
-SAMPLE BULLETS: ${bulletsSample || "(none)"}
-CERTIFICATIONS: ${resume.certifications?.length ? resume.certifications.slice(0, 3).join(", ") : "(none)"}
-TAILORING CHANGES APPLIED: ${changes.length}
+  // Summary
+  const hasSummary = !!resume.summary?.trim();
+  const summaryWordCount = resume.summary?.trim().split(/\s+/).length ?? 0;
+  checks.push({ ok: hasSummary && summaryWordCount >= 20, category: "Content", label: "Professional summary", detail: hasSummary ? (summaryWordCount < 20 ? "Summary is very short — aim for 30–60 words." : "Summary is present and adequate.") : "No summary section detected. A keyword-rich summary boosts ATS ranking." });
 
-Check ALL of: contact completeness, standard section headers (Summary/Skills/Experience/Education), date format consistency (e.g. "Jan 2020 – Mar 2022"), keyword-rich summary, quantified bullets, no tables/columns/graphics, bullet point usage across all roles, skills list relevance, certifications presence, LinkedIn URL format.`,
-      },
-    ],
-    response_format: { type: "json_object" },
-  });
+  // Skills
+  const skillCount = resume.skills?.length ?? 0;
+  checks.push({ ok: skillCount >= 5, category: "Content", label: "Skills list", detail: skillCount >= 5 ? `${skillCount} skills listed.` : skillCount === 0 ? "No skills section found. ATS scans for skill keywords." : `Only ${skillCount} skills listed — aim for at least 8–12 relevant skills.` });
 
-  const text = completion.choices[0]?.message?.content ?? "{}";
-  try {
-    const parsed = JSON.parse(text) as { checks?: ATSCheck[] };
-    return parsed.checks ?? [];
-  } catch {
-    return [];
-  }
+  // Experience bullets
+  const allRoles = resume.experience ?? [];
+  const rolesWithBullets = allRoles.filter(e => (e.bullets?.length ?? 0) > 0).length;
+  checks.push({ ok: allRoles.length > 0, category: "Experience", label: "Work experience", detail: allRoles.length > 0 ? `${allRoles.length} role(s) found.` : "No experience section detected." });
+  checks.push({ ok: rolesWithBullets === allRoles.length && allRoles.length > 0, category: "Experience", label: "Bullet points in all roles", detail: rolesWithBullets === allRoles.length ? "All roles have bullet points." : `${allRoles.length - rolesWithBullets} role(s) have no bullets — ATS needs content to parse.` });
+
+  // Quantified bullets
+  const allBullets = allRoles.flatMap(e => e.bullets ?? []);
+  const quantifiedCount = allBullets.filter(b => /\d/.test(b)).length;
+  const quantifiedRatio = allBullets.length > 0 ? quantifiedCount / allBullets.length : 0;
+  checks.push({ ok: quantifiedRatio >= 0.3, category: "Experience", label: "Quantified achievements", detail: allBullets.length === 0 ? "No bullets to check." : quantifiedRatio >= 0.3 ? `${quantifiedCount} of ${allBullets.length} bullets contain numbers/metrics.` : `Only ${quantifiedCount} of ${allBullets.length} bullets have numbers — aim for at least 30% quantified.` });
+
+  // Date format consistency
+  const periods = allRoles.map(e => e.period ?? "").filter(Boolean);
+  const isoCount = periods.filter(p => /\d{4}/.test(p)).length;
+  checks.push({ ok: periods.length === 0 || isoCount === periods.length, category: "Formatting", label: "Date format consistency", detail: periods.length === 0 ? "No date periods found." : isoCount === periods.length ? "Dates include years — consistent format detected." : "Some roles have inconsistent or missing year formats." });
+
+  // Education
+  const hasEdu = (resume.education?.length ?? 0) > 0;
+  checks.push({ ok: hasEdu, category: "Education", label: "Education section", detail: hasEdu ? `${resume.education!.length} education record(s).` : "No education section found." });
+
+  // Tailoring changes applied
+  checks.push({ ok: changes.length > 0, category: "Tailoring", label: "Tailoring applied", detail: changes.length > 0 ? `${changes.length} tailoring change(s) applied for this job.` : "No tailoring changes — consider tailoring your resume to this job." });
+
+  return checks;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -888,6 +936,33 @@ interface ATSCheck {
 // ── Shared Resume Storage ─────────────────────────────────────────────────────
 
 let tableReady = false;
+let parseCacheTableReady = false;
+async function ensureParseCacheTable() {
+  if (parseCacheTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cached_resume_parses (
+      file_hash TEXT PRIMARY KEY,
+      result    JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  parseCacheTableReady = true;
+}
+
+let tailorCacheTableReady = false;
+async function ensureTailorCacheTable() {
+  if (tailorCacheTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cached_tailoring_results (
+      cache_key  TEXT PRIMARY KEY,
+      result     JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
+    )
+  `);
+  tailorCacheTableReady = true;
+}
+
 async function ensureShareTable() {
   if (tableReady) return;
   await pool.query(`
