@@ -600,54 +600,176 @@ router.get("/scrape", async (req, res) => {
   }
 });
 
+// ── URL slug fallback for JS-rendered job sites ───────────────────────────────
+// Many enterprise career sites (Deloitte, Workday, Taleo, etc.) are SPAs that
+// return empty HTML when fetched server-side. We extract title/company/location
+// from the URL path as a reliable fallback.
+
+const SLUG_MINOR_WORDS = new Set(["and", "or", "the", "of", "in", "at", "for", "to", "a", "an", "with", "by", "on", "as"]);
+const SLUG_UPPER_WORDS = new Set(["ii", "iii", "iv", "vi", "vii", "ai", "ml", "ui", "ux", "api", "sql", "gcp", "aws", "crm", "erp", "hr", "it", "qa", "sr", "jr", "vp", "svp", "evp"]);
+
+function toTitleCaseSlug(s: string): string {
+  return s
+    .split(/\s+/)
+    .map((w, i) => {
+      const lower = w.toLowerCase();
+      if (SLUG_UPPER_WORDS.has(lower)) return w.toUpperCase();
+      if (i > 0 && SLUG_MINOR_WORDS.has(lower)) return lower;
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+// Well-known company domains → display name
+const DOMAIN_COMPANY: Record<string, string> = {
+  "deloitte.com": "Deloitte",
+  "amazon.jobs": "Amazon",
+  "amazon.com": "Amazon",
+  "microsoft.com": "Microsoft",
+  "google.com": "Google",
+  "apple.com": "Apple",
+  "meta.com": "Meta",
+  "netflix.com": "Netflix",
+  "salesforce.com": "Salesforce",
+  "ibm.com": "IBM",
+  "oracle.com": "Oracle",
+  "accenture.com": "Accenture",
+  "mckinsey.com": "McKinsey",
+  "bain.com": "Bain & Company",
+  "bcg.com": "BCG",
+  "pwc.com": "PwC",
+  "kpmg.com": "KPMG",
+  "ey.com": "EY",
+};
+
+function extractFromUrlSlug(urlStr: string): { title: string; company: string; location: string } {
+  let hostname = "";
+  let pathname = "";
+  try {
+    const u = new URL(urlStr);
+    hostname = u.hostname.replace(/^www\./, "").toLowerCase();
+    pathname = u.pathname;
+  } catch {
+    return { title: "", company: "", location: "" };
+  }
+
+  // Resolve company from known domains first
+  let company = "";
+  for (const [domain, name] of Object.entries(DOMAIN_COMPANY)) {
+    if (hostname.includes(domain)) { company = name; break; }
+  }
+
+  // Greenhouse: boards.greenhouse.io/COMPANY/jobs/ID
+  if (!company && hostname.includes("greenhouse.io")) {
+    const parts = pathname.split("/").filter(Boolean);
+    company = toTitleCaseSlug(parts[0]?.replace(/-/g, " ") ?? "");
+  }
+  // Lever: COMPANY.lever.co
+  if (!company && hostname.includes("lever.co")) {
+    company = toTitleCaseSlug(hostname.split(".")[0] ?? "");
+  }
+  // Ashby: jobs.ashbyhq.com/COMPANY
+  if (!company && hostname.includes("ashbyhq.com")) {
+    const parts = pathname.split("/").filter(Boolean);
+    company = toTitleCaseSlug(parts[0]?.replace(/-/g, " ") ?? "");
+  }
+  // Generic: prefer second-level domain (e.g. "jobsus.deloitte.com" already matched above;
+  // for "careers.stripe.com" → "stripe")
+  if (!company) {
+    const parts = hostname.split(".");
+    const idx = parts.length >= 3 ? parts.length - 2 : 0;
+    company = toTitleCaseSlug(parts[idx] ?? "");
+  }
+
+  // Split path into clean segments (remove UUIDs, pure-numeric IDs, and noise words)
+  const NOISE_SLUGS = new Set(["job", "jobs", "apply", "careers", "career", "posting", "details", "view", "position", "opening", "requisition", "req"]);
+  const UUID_RE = /^[a-f0-9]{8,}$/i;
+  const segments = pathname
+    .split("/")
+    .map(s => s.trim().toLowerCase())
+    .filter(s => s && !UUID_RE.test(s) && !/^\d+$/.test(s) && !NOISE_SLUGS.has(s));
+
+  // Detect US location segments like "chicago-il", "new-york-ny"
+  const US_LOCATION_RE = /^[a-z]+(?:-[a-z]+)*-[a-z]{2}$/;
+  const locationSlug = segments.find(s => US_LOCATION_RE.test(s) && s.split("-").length >= 2);
+  let location = "";
+  if (locationSlug) {
+    const parts = locationSlug.split("-");
+    const state = parts.pop()!.toUpperCase();
+    const city = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+    location = `${city}, ${state}`;
+  }
+
+  // Title: longest remaining segment (most likely to be the job title slug)
+  const titleSlug = segments
+    .filter(s => s !== locationSlug && s.length > 4)
+    .sort((a, b) => b.length - a.length)[0] ?? "";
+  const title = titleSlug ? toTitleCaseSlug(titleSlug.replace(/-/g, " ")) : "";
+
+  return { title, company, location };
+}
+
 // POST /api/jobs/from-url
 // Body: { url: string }
 // Fetches a public job posting, strips HTML, uses LLM to extract structured job data.
+// Falls back to URL slug parsing for JS-rendered SPA career sites.
 router.post("/from-url", async (req, res) => {
   const { url } = req.body as { url?: string };
   if (!url || !/^https?:\/\//i.test(url)) {
     return res.status(400).json({ error: "A valid URL starting with http:// or https:// is required" });
   }
 
+  const hostname = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } })();
+  const jobId = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const slugFallback = extractFromUrlSlug(url);
+
+  let pageText = "";
+  let pageTitle = "";
+
   try {
     const pageResp = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; ResumeX100/1.0; +https://resumex100.com)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
       },
       signal: AbortSignal.timeout(12000),
     });
 
-    if (!pageResp.ok) {
-      return res.status(502).json({ error: `The page returned ${pageResp.status}. It may require a login or block automated access.` });
+    if (pageResp.ok) {
+      const html = await pageResp.text();
+      pageTitle = (/<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1] ?? "").trim();
+      pageText = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .slice(0, 5000);
     }
+  } catch {
+    // Network error — fall through to slug-only path
+  }
 
-    const html = await pageResp.text();
+  // If page text is too thin (SPA shell / login wall / network error), skip AI and use slug
+  const pageHasContent = pageText.length > 300;
 
-    // Extract <title> as a hint for the LLM
-    const pageTitle = (/<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1] ?? "").trim();
+  let extracted: { title?: string; company?: string; location?: string; description?: string } = {};
 
-    // Strip scripts, styles, and tags
-    const pageText = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s{2,}/g, " ")
-      .trim()
-      .slice(0, 5000);
-
-    const completion = await openai.chat.completions.create({
-      model: DEPLOYMENT,
-      max_completion_tokens: 900,
-      messages: [
-        {
-          role: "system",
-          content: `You are a job posting parser. Extract structured job information from page text.
+  if (pageHasContent) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: DEPLOYMENT,
+        max_completion_tokens: 900,
+        messages: [
+          {
+            role: "system",
+            content: `You are a job posting parser. Extract structured job information from page text.
 Return ONLY valid JSON — no markdown fences, no extra commentary.`,
-        },
-        {
-          role: "user",
-          content: `Page title: "${pageTitle}"
+          },
+          {
+            role: "user",
+            content: `Page title: "${pageTitle}"
 
 Page text (up to 5000 chars):
 ${pageText}
@@ -663,40 +785,43 @@ Extract and return JSON with exactly these fields:
 Rules:
 - Use empty string "" if a field cannot be determined confidently.
 - The description must be the job's real content — not navigation text, cookie banners, or boilerplate.`,
-        },
-      ],
-      response_format: { type: "json_object" },
-    });
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
 
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const extracted = JSON.parse(raw) as { title?: string; company?: string; location?: string; description?: string };
-
-    if (!extracted.title && !extracted.company) {
-      return res.status(422).json({ error: "Could not extract job information from this page. Make sure it is a public job posting and not a login wall." });
+      const raw = completion.choices[0]?.message?.content ?? "{}";
+      extracted = JSON.parse(raw);
+    } catch (aiErr) {
+      logger.warn({ aiErr }, "from-url AI extraction failed — using slug fallback");
     }
-
-    const hostname = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } })();
-    const jobId = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-    return res.json({
-      id: jobId,
-      title: extracted.title || "Unknown Title",
-      company: extracted.company || "Unknown Company",
-      location: extracted.location || "Not specified",
-      via: hostname,
-      description: extracted.description || pageText.slice(0, 800),
-      highlights: [],
-      postedAt: "Recently",
-      salary: null,
-      remote: /remote/i.test(extracted.location ?? ""),
-      scheduleType: "Full-time",
-      applyLink: url,
-      source: "custom" as const,
-    });
-  } catch (err) {
-    logger.error({ err }, "from-url error");
-    return res.status(500).json({ error: "Could not process that URL. The page may be blocking automated access." });
   }
+
+  // Merge: prefer AI-extracted fields, fall back to slug-parsed values
+  const title = extracted.title || slugFallback.title;
+  const company = extracted.company || slugFallback.company;
+  const location = extracted.location || slugFallback.location;
+  const description = extracted.description || pageText.slice(0, 800) || "";
+
+  if (!title && !company) {
+    return res.status(422).json({ error: "Could not extract job information from this page. Make sure it is a public job posting URL." });
+  }
+
+  return res.json({
+    id: jobId,
+    title: title || "Unknown Title",
+    company: company || "Unknown Company",
+    location: location || "Not specified",
+    via: hostname,
+    description,
+    highlights: [],
+    postedAt: "Recently",
+    salary: null,
+    remote: /remote/i.test(location ?? ""),
+    scheduleType: "Full-time",
+    applyLink: url,
+    source: "custom" as const,
+  });
 });
 
 export default router;
