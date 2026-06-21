@@ -950,9 +950,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
   const [selectedTitles, setSelectedTitles] = useState<Set<string>>(
     new Set((savedData?.recommendations ?? RESUME_RECOMMENDATIONS).titles.slice(0, 3).map(t => t.title))
   );
-  const [selectedLocations, setSelectedLocations] = useState<string[]>(
-    [(savedData?.recommendations ?? RESUME_RECOMMENDATIONS).locations[0]?.label ?? "Remote (US)"]
-  );
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [recommendations, setRecommendations] = useState<ParsedResumeResult["recommendations"]>(
     savedData?.recommendations ?? RESUME_RECOMMENDATIONS
   );
@@ -991,9 +989,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     onParsed(editedResume, reviewing.recommendations, reviewing.fileName);
     setRecommendations(reviewing.recommendations);
     setSelectedTitles(new Set(reviewing.recommendations.titles.slice(0, 3).map(t => t.title)));
-    if (reviewing.recommendations.locations.length > 0) {
-      setSelectedLocations([reviewing.recommendations.locations[0].label]);
-    }
+    setSelectedLocations([]);
     setReviewing(null);
     setUploaded(true);
   };
@@ -1005,7 +1001,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     setParseError(null);
     setRecommendations(RESUME_RECOMMENDATIONS);
     setSelectedTitles(new Set(RESUME_RECOMMENDATIONS.titles.slice(0, 3).map(t => t.title)));
-    setSelectedLocations([RESUME_RECOMMENDATIONS.locations[0]?.label ?? "Remote (US)"]);
+    setSelectedLocations([]);
   };
 
   const toggleTitle = (t: string) => setSelectedTitles(prev => { const s = new Set(prev); s.has(t) ? s.delete(t) : s.add(t); return s; });
@@ -1154,7 +1150,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                     onParsed(ALEX, RESUME_RECOMMENDATIONS, "demo_resume.pdf");
                     setRecommendations(RESUME_RECOMMENDATIONS);
                     setSelectedTitles(new Set(RESUME_RECOMMENDATIONS.titles.slice(0, 3).map(t => t.title)));
-                    setSelectedLocations([RESUME_RECOMMENDATIONS.locations[0]?.label ?? "Remote (US)"]);
+                    setSelectedLocations([]);
                     setUploaded(true);
                     setFileName("demo_resume.pdf");
                   }}>
