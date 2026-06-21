@@ -660,6 +660,8 @@ function Footer() {
           <a href="#features" style={{ color: "#666" }} onMouseEnter={e => (e.currentTarget.style.color = "#fff")} onMouseLeave={e => (e.currentTarget.style.color = "#666")}>Features</a>
           <a href="#pricing" style={{ color: "#666" }} onMouseEnter={e => (e.currentTarget.style.color = "#fff")} onMouseLeave={e => (e.currentTarget.style.color = "#666")}>Pricing</a>
           <Link href="/blog" style={{ color: "#666" }}>Blog</Link>
+          <Link href="/privacy" style={{ color: "#666" }}>Privacy</Link>
+          <Link href="/terms" style={{ color: "#666" }}>Terms</Link>
           <Link href="/signin" style={{ color: "#666" }}>Sign in</Link>
         </div>
         <p className="text-xs" style={{ color: "#444" }}>© 2025 ResumeX100. All rights reserved.</p>
