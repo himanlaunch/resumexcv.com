@@ -905,7 +905,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   return `Tailor this resume for the job below. Return a JSON object with this exact shape:
 
 {
-  "matchScore": <number 0-100>,
+  "matchScore": <number 0-100 — the PROJECTED keyword match AFTER the user accepts all your proposed changes. Aim for 85-95. This is not the current score; it is the score the resume will have once all rewrites are applied.>,
   "seniorityMatch": <"perfect" | "stretch" | "overqualified">,
   "changes": [
     {
@@ -926,6 +926,14 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   },
   "senioritySignals": ["<list of seniority-tone suggestions, e.g. change 'I built' to 'Led team to build'>"]
 }
+
+TAILORING RULES — follow all of these:
+1. Coverage target: your proposed changes must collectively inject at least 85% of the job's important keywords into the resume. Review the job description carefully and identify every significant keyword, skill, tool, methodology, and requirement. Rewrite bullets and the summary to naturally incorporate them.
+2. Rewrite every experience bullet that can be made more relevant — do not leave relevant bullets unchanged when they could be keyword-enriched.
+3. Rewrite the summary to mirror the job's language, seniority level, and top 3-4 requirements.
+4. Add or rewrite Skills entries to match the job's technology/tool requirements that the candidate demonstrably has.
+5. Every job requirement should map to at least one "proposed" change. If no existing bullet covers a requirement, create a new "confirm" bullet the candidate can accept or edit.
+6. matchScore MUST reflect the score AFTER all changes are accepted — not the current score. Calculate it by estimating what percentage of the job's key requirements your proposed text covers.
 
 RESUME:
 Name: ${resume.contact?.name ?? ""}
