@@ -30,18 +30,14 @@ const SYSTEM_TAILORING = `You are an expert resume writer and ATS specialist.
 Your job is to tailor a candidate's resume for a specific job posting.
 
 STRICT RULES — you must follow these without exception:
-1. NEVER fabricate experience, skills, companies, dates, or metrics the candidate has not provided.
-2. Every change must be grounded in the candidate's actual resume content.
-3. If a job requirement has NO match in the resume, flag it as a "true_gap" — do NOT add it silently.
-4. Use strong action verbs and quantify impact where evidence already exists in the resume.
-5. Optimize keyword density for ATS without keyword stuffing.
-6. The "proposed" field must contain FINAL RESUME TEXT ONLY. Never include reasoning, caveats, instructions, validation notes, "do not", "unless confirmed", "if accurate", or other meta-commentary in proposed text.
-7. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.
-8. WRITING STYLE — proposed text must read as human-written, not AI-generated:
-   - Do NOT use em dashes (—). Use commas, semicolons, or start a new clause instead.
-   - Avoid overused AI buzzwords: "leveraged", "spearheaded", "orchestrated", "championed", "utilized", "synergized", "facilitated", "streamlined" unless the original resume already uses them.
-   - Prefer plain, direct language: "used" over "utilized", "led" over "spearheaded", "helped" over "facilitated".
-   - Do NOT add parenthetical phrases like "(e.g., ...)" or "(resulting in ...)" unless they were in the original.`;
+1. NEVER fabricate specific companies, clients, job titles, or dates the candidate has not provided.
+2. Every change must be grounded in the candidate's actual resume content or plausible adjacent skills.
+3. If a job requirement has NO match in the resume, flag it as "true_gap" AND still write a concise, resume-ready "proposed" bullet the candidate can review, edit, and accept or reject. Base it on their background and transferable skills — write it as if they did adjacent work.
+4. For "evidence" gaps (skill claimed but no example), always generate a concrete, specific "proposed" bullet showing that skill in action — ground it in their existing experience bullets.
+5. Use strong action verbs and quantify impact where evidence already exists in the resume.
+6. Optimize keyword density for ATS without keyword stuffing.
+7. The "proposed" field must contain FINAL RESUME TEXT ONLY — one or two polished bullet-point sentences ready to paste into a resume. Never include reasoning, caveats, instructions, validation notes, "do not", "unless confirmed", "if accurate", or any meta-commentary in proposed text. Put explanations only in "gapNote".
+8. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const MAX_RESUME_PARSE_CHARS = 24000;
@@ -210,7 +206,11 @@ function sanitizeTailoringResult(result: TailoringResult): TailoringResult {
         const proposed = change.section?.toLowerCase().includes("skill")
           ? sanitizeResumeSkillText(change.proposed)
           : sanitizeResumeText(change.proposed);
-        return { ...change, proposed };
+        // Gap rows must always be "confirm" so the user can Accept/Retry/Reject them
+        const status = change.gapType && change.gapType !== null && change.status !== "confirm"
+          ? "confirm"
+          : change.status;
+        return { ...change, proposed, status };
       })
       .filter((change) => change.proposed || change.status !== "rewritten"),
   };
@@ -733,7 +733,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   "changes": [
     {
       "id": "<unique string>",
-      "section": "<use exactly one of: 'Summary' | 'Skills' | 'Education' | 'Certifications' | 'Experience - <Company Name>' where <Company Name> is the exact company name from the resume>",
+      "section": "<section name — use exact format: 'Summary', 'Skills', 'Education', 'Certifications', or 'Experience - <Company Name>' for experience bullets>",
       "original": "<original text from resume or '[Not in resume]'>",
       "jobReq": "<specific requirement from job description this addresses>",
       "proposed": "<final resume-ready rewrite only; no notes, reasoning, caveats, or instructions>",
@@ -773,32 +773,40 @@ Produce ONLY the JSON object. No markdown fences. No extra commentary.`;
 }
 
 async function runATSCheck(resume: ResumeRecord, changes: DiffChange[]): Promise<ATSCheck[]> {
+  const skillsSample = (resume.skills ?? []).slice(0, 20).join(", ");
+  const bulletsSample = (resume.experience ?? [])
+    .flatMap(e => (e.bullets ?? []).slice(0, 3))
+    .slice(0, 12)
+    .join(" | ");
+  const periods = (resume.experience ?? []).map(e => e.period ?? "").filter(Boolean).join(", ");
+  const summary = (resume.summary ?? "").slice(0, 300);
+  const rolesWithBullets = (resume.experience ?? []).filter(e => e.bullets && e.bullets.length > 0).length;
+  const allRoles = resume.experience?.length ?? 0;
+
   const completion = await openai.chat.completions.create({
     model: DEPLOYMENT,
-    max_completion_tokens: 800,
+    max_completion_tokens: 900,
     messages: [
       {
         role: "system",
-        content: `You are an ATS (Applicant Tracking System) formatting expert.
-Analyse the resume structure and return ONLY a JSON array of check objects.
-Each check: { "ok": boolean, "category": string, "label": string, "detail": string }
-Focus on REAL formatting issues — no fake ATS scores.`,
+        content: `You are an ATS (Applicant Tracking System) compliance expert.
+Return ONLY a JSON object with a "checks" array. Each check: { "ok": boolean, "category": string, "label": string, "detail": string }.
+Be specific — reference actual content from the resume, not generic advice.`,
       },
       {
         role: "user",
-        content: `Check this resume for ATS compliance:
+        content: `Audit this resume for ATS compliance. Return {"checks": [...]}.
 
-Name: ${resume.contact?.name ?? ""}
-Has email: ${!!resume.contact?.email}
-Has location: ${!!resume.contact?.location}
-Has LinkedIn: ${!!resume.contact?.linkedin}
-Section headers present: Summary, Skills, Experience, Education, Certifications
-Number of experience roles: ${resume.experience?.length ?? 0}
-Uses bullet points: ${resume.experience?.some((e) => e.bullets?.length) ?? false}
-Has certifications: ${!!resume.certifications?.length}
-Changes applied: ${changes.length} tailoring changes
+CONTACT: name=${resume.contact?.name ?? "(missing)"}, email=${resume.contact?.email ?? "(missing)"}, location=${resume.contact?.location ?? "(missing)"}, linkedin=${resume.contact?.linkedin ?? "(missing)"}
+SUMMARY (first 300 chars): ${summary || "(none)"}
+SKILLS: ${skillsSample || "(none)"}
+EXPERIENCE: ${allRoles} roles, ${rolesWithBullets} have bullet points
+DATE FORMATS USED: ${periods || "(none)"}
+SAMPLE BULLETS: ${bulletsSample || "(none)"}
+CERTIFICATIONS: ${resume.certifications?.length ? resume.certifications.slice(0, 3).join(", ") : "(none)"}
+TAILORING CHANGES APPLIED: ${changes.length}
 
-Return JSON array. Cover: single-column layout warning, contact info placement, standard headers, date formats, keyword presence, file format recommendation, bullet point usage, section order.`,
+Check ALL of: contact completeness, standard section headers (Summary/Skills/Experience/Education), date format consistency (e.g. "Jan 2020 – Mar 2022"), keyword-rich summary, quantified bullets, no tables/columns/graphics, bullet point usage across all roles, skills list relevance, certifications presence, LinkedIn URL format.`,
       },
     ],
     response_format: { type: "json_object" },
@@ -806,8 +814,8 @@ Return JSON array. Cover: single-column layout warning, contact info placement, 
 
   const text = completion.choices[0]?.message?.content ?? "{}";
   try {
-    const parsed = JSON.parse(text) as { checks?: ATSCheck[] } | ATSCheck[];
-    return Array.isArray(parsed) ? parsed : parsed.checks ?? [];
+    const parsed = JSON.parse(text) as { checks?: ATSCheck[] };
+    return parsed.checks ?? [];
   } catch {
     return [];
   }

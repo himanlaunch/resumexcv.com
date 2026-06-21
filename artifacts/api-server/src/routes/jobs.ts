@@ -134,15 +134,15 @@ router.get("/search", async (req, res) => {
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean)
-    .slice(0, 4);
+    .slice(0, 5);
 
   if (titles.length === 0) {
     return res.status(400).json({ error: "At least one job title required" });
   }
 
-  // Parse comma-separated locations
+  // Parse pipe-separated locations (pipe is used to avoid breaking "City, State" values)
   const locationTokens = locationParam
-    .split(",")
+    .split("|")
     .map((l) => l.trim())
     .filter(Boolean);
 
@@ -154,7 +154,7 @@ router.get("/search", async (req, res) => {
     .filter((l) => !/^remote|^hybrid/i.test(l))
     .map((l) => l.replace(/\(.*?\)/g, "").trim())
     .filter(Boolean)
-    .slice(0, 2); // max 2 city searches to protect SerpAPI quota
+    .slice(0, 3); // max 3 city searches (matches UI maxLocations)
 
   // If only remote options were selected, use "United States" as geographic base
   const searchCities = cityTokens.length > 0 ? cityTokens : ["United States"];
@@ -338,6 +338,70 @@ router.get("/search", async (req, res) => {
     }
     logger.error({ err }, "Job search error");
     return res.status(500).json({ error: "Internal error during job search" });
+  }
+});
+
+// GET /api/jobs/autocomplete?q=<query>&type=role|location
+// Returns SerpAPI Google Autocomplete suggestions for job roles or locations.
+const LOCATION_NOISE_RE = /\b(weather|news|times|restaurant|hotel|map|directions|schedule|score|wiki|population|zip|area code|airport|dmv|nfl|nba|mlb|traffic|crime|covid|economy)\b/i;
+const JOB_SUFFIX_RE = /\s+(jobs?|openings?|careers?|salary|listings?|positions?|hiring|near me|description|resume|interview|requirements?).*$/i;
+
+router.get("/autocomplete", async (req, res) => {
+  const q = String(req.query.q ?? "").trim();
+  const type = String(req.query.type ?? "role"); // "role" | "location"
+
+  if (!q || q.length < 2) return res.json({ suggestions: [] });
+  if (!SERPAPI_KEY) return res.json({ suggestions: [] });
+
+  try {
+    // For locations, append "jobs" as context so Google returns job-location style completions
+    const searchQuery = type === "location" ? `jobs in ${q}` : q;
+    const params = new URLSearchParams({
+      engine: "google_autocomplete",
+      q: searchQuery,
+      gl: "us",
+      hl: "en",
+      api_key: SERPAPI_KEY,
+    });
+
+    const r = await fetch(`https://serpapi.com/search?${params}`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) return res.json({ suggestions: [] });
+
+    const data = (await r.json()) as { suggestions?: { value: string; type?: string }[] };
+    const raw = data.suggestions ?? [];
+
+    let suggestions: string[];
+    if (type === "location") {
+      suggestions = raw
+        .map(s => s.value
+          // Strip the "jobs in " prefix we added, and any trailing job-noise
+          .replace(/^jobs\s+in\s+/i, "")
+          .replace(JOB_SUFFIX_RE, "")
+          .trim()
+        )
+        .filter(s =>
+          s.length > 1 &&
+          s.length < 60 &&
+          !LOCATION_NOISE_RE.test(s) &&
+          // Must start with the user's query (ensures relevance)
+          s.toLowerCase().startsWith(q.toLowerCase().slice(0, Math.max(2, q.length - 2)))
+        )
+        .filter((s, i, arr) => arr.indexOf(s) === i)
+        .slice(0, 6);
+    } else {
+      suggestions = raw
+        .map(s => s.value.replace(JOB_SUFFIX_RE, "").trim())
+        .filter(s => s.length > 2 && s.length < 80 && !LOCATION_NOISE_RE.test(s))
+        .filter((s, i, arr) => arr.indexOf(s) === i)
+        .slice(0, 8);
+    }
+
+    return res.json({ suggestions });
+  } catch (err) {
+    logger.error({ err }, "Autocomplete error");
+    return res.json({ suggestions: [] });
   }
 });
 

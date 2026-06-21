@@ -257,6 +257,36 @@ export async function parseResume(file: File): Promise<ParsedResumeResult> {
   };
 }
 
+// ── Autocomplete ─────────────────────────────────────────────────────────────
+
+export async function autocompleteRole(q: string): Promise<string[]> {
+  if (!q || q.length < 2) return [];
+  try {
+    const res = await fetch(`${API_BASE}/jobs/autocomplete?type=role&q=${encodeURIComponent(q)}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { suggestions?: string[] };
+    return data.suggestions ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function autocompleteLocation(q: string): Promise<string[]> {
+  if (!q || q.length < 2) return [];
+  try {
+    const res = await fetch(`${API_BASE}/jobs/autocomplete?type=location&q=${encodeURIComponent(q)}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { suggestions?: string[] };
+    return data.suggestions ?? [];
+  } catch {
+    return [];
+  }
+}
+
 // ── Job Search ────────────────────────────────────────────────────────────────
 
 export interface SearchJobsOptions {

@@ -16,6 +16,7 @@ import {
   getBillingPrices, getCreditBalance, createCheckout,
   getSavedProfile, saveProfile, clearSavedProfile,
   getGeneratedResumes, saveGeneratedResume, deleteGeneratedResume,
+  autocompleteRole, autocompleteLocation,
   type ParsedResumeResult, type CreditBalance, type PricingPlan,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -481,19 +482,45 @@ function LocationPicker({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [apiSuggestions, setApiSuggestions] = useState<string[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = useMemo(() =>
+  // Debounced SerpAPI autocomplete fetch
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!query || query.length < 2) { setApiSuggestions([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setApiLoading(true);
+      const results = await autocompleteLocation(query);
+      setApiSuggestions(results);
+      setApiLoading(false);
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query]);
+
+  const staticFiltered = useMemo(() =>
     LOCATION_SUGGESTIONS
       .filter((l) => !selected.includes(l.label) && l.label.toLowerCase().includes(query.toLowerCase()))
-      .slice(0, 8),
+      .slice(0, 5),
     [query, selected]
   );
 
+  // Merge static + API results, deduplicate by lower label
+  const filtered = useMemo(() => {
+    const staticLabels = new Set(staticFiltered.map(l => l.label.toLowerCase()));
+    const apiItems = apiSuggestions
+      .filter(s => !selected.includes(s) && !staticLabels.has(s.toLowerCase()))
+      .slice(0, 5)
+      .map(s => ({ label: s, icon: "📍" }));
+    return [...staticFiltered, ...apiItems];
+  }, [staticFiltered, apiSuggestions, selected]);
+
   const hasCustomQuery =
     query.trim().length > 0 &&
-    !LOCATION_SUGGESTIONS.some((s) => s.label.toLowerCase() === query.trim().toLowerCase()) &&
+    !filtered.some((s) => s.label.toLowerCase() === query.trim().toLowerCase()) &&
     !selected.includes(query.trim());
 
   const add = (label: string) => {
@@ -584,7 +611,7 @@ function LocationPicker({
           </div>
 
           {/* Dropdown */}
-          {open && (filtered.length > 0 || hasCustomQuery) && (
+          {open && (filtered.length > 0 || hasCustomQuery || apiLoading) && (
             <div
               className="absolute z-20 w-full mt-1 rounded-xl shadow-lg overflow-hidden"
               style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}
@@ -602,6 +629,12 @@ function LocationPicker({
                   <span>{label}</span>
                 </button>
               ))}
+              {apiLoading && filtered.length === 0 && (
+                <div className="flex items-center gap-2 px-4 py-3 text-sm" style={{ color: "#999" }}>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Searching…
+                </div>
+              )}
               {hasCustomQuery && (
                 <button
                   onMouseDown={(e) => { e.preventDefault(); add(query.trim()); }}
@@ -846,13 +879,35 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     ];
     return Array.from(new Set(titles));
   }, [recommendations.titles]);
+  const [roleApiSuggestions, setRoleApiSuggestions] = useState<string[]>([]);
+  const [roleApiLoading, setRoleApiLoading] = useState(false);
+  const roleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (roleDebounceRef.current) clearTimeout(roleDebounceRef.current);
+    const q = customTitleInput.trim();
+    if (!q || q.length < 2) { setRoleApiSuggestions([]); return; }
+    roleDebounceRef.current = setTimeout(async () => {
+      setRoleApiLoading(true);
+      const results = await autocompleteRole(q);
+      setRoleApiSuggestions(results);
+      setRoleApiLoading(false);
+    }, 400);
+    return () => { if (roleDebounceRef.current) clearTimeout(roleDebounceRef.current); };
+  }, [customTitleInput]);
+
   const roleSuggestions = useMemo(() => {
     const q = customTitleInput.trim().toLowerCase();
-    if (!q) return allRoleSuggestions.filter(title => !selectedTitles.has(title)).slice(0, 8);
-    return allRoleSuggestions
-      .filter(title => !selectedTitles.has(title) && title.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [allRoleSuggestions, customTitleInput, selectedTitles]);
+    const staticMatches = q
+      ? allRoleSuggestions.filter(title => !selectedTitles.has(title) && title.toLowerCase().includes(q)).slice(0, 5)
+      : allRoleSuggestions.filter(title => !selectedTitles.has(title)).slice(0, 8);
+    if (!q) return staticMatches;
+    const staticSet = new Set(staticMatches.map(t => t.toLowerCase()));
+    const apiItems = roleApiSuggestions
+      .filter(t => !selectedTitles.has(t) && !staticSet.has(t.toLowerCase()))
+      .slice(0, 4);
+    return [...staticMatches, ...apiItems];
+  }, [allRoleSuggestions, customTitleInput, selectedTitles, roleApiSuggestions]);
   const addRoleSuggestion = (title: string) => {
     setSelectedTitles(prev => new Set(prev).add(title));
     setCustomTitleInput("");
@@ -1032,6 +1087,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                           }
                         }}
                       />
+                      {roleApiLoading && <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />}
                       </div>
                       {roleSuggestionsOpen && (roleSuggestions.length > 0 || customTitleInput.trim()) && (
                         <div className="absolute z-20 w-full mt-1 rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}>
@@ -1381,11 +1437,15 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
   const nextCursor = useRef<string | null>(null);
   const didFetch = useRef(false);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   // Track which dateFilter the current jobs were fetched with, so Load More is consistent
   const activeServerFilter = useRef<string | undefined>(undefined);
 
-  const doFetch = useCallback(async (start: number, append: boolean, dateFilter?: string) => {
+  const doFetch = useCallback(async (start: number, append: boolean, dateFilter?: string, platforms?: string[]) => {
     if (!append) {
+      // Cancel any in-flight request before starting a fresh search
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
       setStatus("loading");
       setLoadMoreError(null);
       nextCursor.current = null;
@@ -1395,7 +1455,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
       const result = await searchJobs(
         titles,
         location,
-        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: 10 },
+        { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: 10, platforms },
         !append ? (job) => setJobs(prev => [...prev, job]) : undefined
       );
       if (append) {
@@ -1433,7 +1493,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
     // Server filter changed: reset pagination and fetch fresh
     nextStart.current = 0;
     nextCursor.current = null;
-    doFetch(0, false, newServerFilter);
+    doFetch(0, false, newServerFilter, [...activePlatforms]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeFilter]); // intentionally exclude doFetch — its stable identity breaks the guard
 
@@ -1441,10 +1501,10 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
     if (!hasMore || loadingMore || status === "loading") return false;
     setLoadingMore(true);
     setLoadMoreError(null);
-    await doFetch(nextStart.current, true, activeServerFilter.current);
+    await doFetch(nextStart.current, true, activeServerFilter.current, [...activePlatforms]);
     setLoadingMore(false);
     return true;
-  }, [doFetch, hasMore, loadingMore, status]);
+  }, [doFetch, hasMore, loadingMore, status, activePlatforms]);
 
   const handleSearch = async () => {
     didFetch.current = true;
@@ -1452,7 +1512,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
     nextCursor.current = null;
     setSelected(new Set());
     setCurrentPage(1);
-    await doFetch(0, false, getServerDateFilter(timeFilter));
+    await doFetch(0, false, getServerDateFilter(timeFilter), [...activePlatforms]);
   };
 
   useEffect(() => {
@@ -2094,8 +2154,11 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
 
   const handleConfirm = (rowId: string, accept: boolean) => {
     const row = rows.find(r => r.id === rowId);
-    const hasSafeProposal = !!(row?.customText ?? row?.proposed ?? "").trim();
-    updateRow(activeJobId, rowId, { confirmed: true, status: accept && hasSafeProposal ? "rewritten" : "kept" });
+    if (!row) return;
+    // Consider proposed safe if the row has any proposed text, or if user clicked Reject (always "kept")
+    const hasSafeProposal = !!(row.customText ?? row.proposed ?? "").trim();
+    const newStatus: DiffChange["status"] = accept && hasSafeProposal ? "rewritten" : "kept";
+    updateRow(activeJobId, rowId, { confirmed: true, status: newStatus });
   };
 
   const handleConfirmAll = (accept: boolean) => {
@@ -2339,14 +2402,14 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
   onCustomText: (id: string, text: string) => void;
 }) {
   const isTrueGap = row.gapType === "true_gap";
-  const shortRequirement = row.jobReq.replace(/^["']|["']$/g, "").replace(/\s+/g, " ").slice(0, 120);
-  const recommendedTrueGapDraft = `Worked on ${shortRequirement} related initiatives, applied relevant skills and delivered measurable outcomes.`;
+  const isEvidenceGap = row.gapType === "evidence";
+  const needsFallback = isTrueGap || isEvidenceGap;
   const rawProposed = (row.customText ?? row.proposed ?? "").trim();
-  // For true-gap rows with no AI proposal, surface the recommended draft so users always have something to Accept/Retry/Reject
-  const proposedText = rawProposed.length > 0 ? rawProposed : (isTrueGap ? recommendedTrueGapDraft : "");
+  // If the AI returned no proposed text (wiped by sanitizer or left blank), show a Retry prompt
+  const proposedText = rawProposed;
   const hasSafeProposal = proposedText.length > 0;
   const isPending = row.status === "confirm" && !row.confirmed;
-  const [editText, setEditText] = useState(row.customText ?? row.proposed ?? (isTrueGap ? recommendedTrueGapDraft : ""));
+  const [editText, setEditText] = useState(row.customText ?? row.proposed ?? "");
   const [editMode, setEditMode] = useState(false);
   const gapChip = row.gapType === "true_gap"
     ? <span className="chip-red text-xs">True gap</span>
@@ -2370,7 +2433,7 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
         </div>
         {row.status !== "kept" && (
           <div className="flex items-center gap-1 flex-wrap">
-            <button onClick={() => { setEditMode(true); setEditText(proposedText || (row.customText ?? row.proposed ?? "")); }}
+            <button onClick={() => { setEditMode(true); setEditText(row.customText ?? row.proposed ?? ""); }}
               className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-lg transition-all"
               style={{ color: "#555" }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = "#EBEBEB"}
@@ -2422,24 +2485,35 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
             </div>
           ) : (
             <>
-              <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>{proposedText}</span>
-              {isTrueGap && !row.customText && rawProposed.length === 0 && (
-                <p className="text-xs mt-2 italic" style={{ color: "#9CA3AF" }}>
-                  AI suggestion — edit to add your specific project, tools, and results.
-                </p>
-              )}
-              {isPending && (
-                <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                  <button onClick={() => onConfirm(row.id, true)}
-                    className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-                    style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
-                  ><ThumbsUp className="w-3.5 h-3.5" /> Accept</button>
-                  <button onClick={() => onConfirm(row.id, false)}
-                    className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
-                    style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
-                  ><ThumbsDown className="w-3.5 h-3.5" /> Reject</button>
+              {hasSafeProposal ? (
+                <>
+                  <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>{proposedText}</span>
+                  {isPending && (
+                    <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                      <button onClick={() => onConfirm(row.id, true)}
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+                        style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
+                      ><ThumbsUp className="w-3.5 h-3.5" /> Accept</button>
+                      <button onClick={() => onConfirm(row.id, false)}
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+                        style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
+                      ><ThumbsDown className="w-3.5 h-3.5" /> Reject</button>
+                    </div>
+                  )}
+                </>
+              ) : needsFallback ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs" style={{ color: "#888" }}>
+                    No suggestion generated. Click <strong>Retry</strong> to get an AI-drafted bullet, or <strong>Edit</strong> to write your own.
+                  </p>
+                  {isPending && (
+                    <button onClick={() => onConfirm(row.id, false)}
+                      className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full w-fit"
+                      style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
+                    ><ThumbsDown className="w-3.5 h-3.5" /> Reject</button>
+                  )}
                 </div>
-              )}
+              ) : null}
             </>
           )}
         </div>
@@ -2487,6 +2561,8 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
   };
 
   for (const row of rows) {
+    // Apply all rewritten rows: AI auto-rewrites (confirmed=undefined) and user-accepted confirm rows (confirmed=true).
+    // Rejected rows become status="kept" and are correctly skipped. Unreviewed confirm rows remain status="confirm".
     if (row.status !== "rewritten") continue;
     const rawText = (row.customText ?? row.proposed).trim();
     const finalText = sanitizeResumeText(rawText);
@@ -2566,13 +2642,13 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
 
     } else {
       if (isInsertion) {
-        const companyHint = sec.replace(/experience\s*[-–—]?\s*/i, "").trim();
+        const companyHint = sec.replace(/^experience\s*[-–—:]\s*/i, "").trim().toLowerCase();
         const target = companyHint
-          ? (result.experience ?? []).find(e => e.company.toLowerCase().includes(companyHint)) ?? result.experience?.[0]
+          ? (result.experience ?? []).find(e => e.company.toLowerCase().includes(companyHint) || companyHint.includes(e.company.toLowerCase())) ?? result.experience?.[0]
           : result.experience?.[0];
         if (target) target.bullets = [...(target.bullets ?? []), finalText];
       } else {
-        const normalOrig = row.original?.trim().toLowerCase() ?? "";
+        const normalOrig = (row.original ?? "").trim().toLowerCase();
         for (const exp of result.experience ?? []) {
           const bulletIdx = exp.bullets?.findIndex(b => b.trim().toLowerCase() === normalOrig);
           if (bulletIdx !== undefined && bulletIdx >= 0) {
@@ -3155,10 +3231,13 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set(savedVersionIds));
   const autoSavedJobIds = useRef<Set<string>>(new Set(savedVersionIds));
 
-  const tailoredResumes: Record<string, ResumeData> = {};
-  for (const job of selectedJobs) {
-    tailoredResumes[job.id] = applyDiffs(resume, jobDiffs[job.id] ?? []);
-  }
+  const tailoredResumes = useMemo(() => {
+    const out: Record<string, ResumeData> = {};
+    for (const job of selectedJobs) {
+      out[job.id] = applyDiffs(resume, jobDiffs[job.id] ?? []);
+    }
+    return out;
+  }, [resume, selectedJobs, jobDiffs]);
 
   useEffect(() => {
     selectedJobs.forEach(job => upsertCampaignFromJob(user?.id, job));
@@ -3166,9 +3245,12 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
 
   useEffect(() => {
     selectedJobs.forEach(job => {
-      if (autoSavedJobIds.current.has(job.id)) return;
       const changes = jobDiffs[job.id] ?? [];
       if (changes.length === 0) return;
+      // Only auto-save once all pending confirm rows have been reviewed
+      const pendingCount = changes.filter(r => r.status === "confirm" && !r.confirmed).length;
+      if (pendingCount > 0) return;
+      if (autoSavedJobIds.current.has(job.id)) return;
       autoSavedJobIds.current.add(job.id);
       const version: SavedVersion = {
         id: `generated-${job.id}-${Date.now()}`,
@@ -3734,7 +3816,7 @@ export default function AppWorkspace() {
           }} />
         )}
         {step === 3 && (
-          <Step3Discovery titles={searchTitles} location={searchLocations.join(", ")} resume={resume} autoSearchRun={discoverySearchRun}
+          <Step3Discovery titles={searchTitles} location={searchLocations.join("|")} resume={resume} autoSearchRun={discoverySearchRun}
             onNext={(jobs) => { void handleJobsReady(jobs); }} />
         )}
         {step === 4 && (
