@@ -221,6 +221,7 @@ function sanitizeResumeRecord(resume = {}) {
   return {
     contact: {
       name: sanitizeResumeText(resume.contact?.name),
+      phone: sanitizeResumeText(resume.contact?.phone),
       email: sanitizeResumeText(resume.contact?.email),
       location: sanitizeResumeText(resume.contact?.location),
       linkedin: sanitizeResumeText(resume.contact?.linkedin),
@@ -231,15 +232,18 @@ function sanitizeResumeRecord(resume = {}) {
     experience: (resume.experience ?? []).map((exp) => ({
       title: sanitizeResumeText(exp.title),
       company: sanitizeResumeText(exp.company),
+      location: sanitizeResumeText(exp.location),
       period: sanitizeResumeText(exp.period),
       bullets: (exp.bullets ?? []).map(sanitizeResumeText).filter((bullet) => !isLocationOnlyBullet(bullet)).filter(Boolean),
     })),
     education: (resume.education ?? []).map((edu) => ({
       degree: sanitizeResumeText(edu.degree),
       school: sanitizeResumeText(edu.school),
+      location: sanitizeResumeText(edu.location),
       year: sanitizeResumeText(edu.year),
     })),
     certifications: (resume.certifications ?? []).map(sanitizeResumeText).filter(Boolean),
+    achievements: (resume.achievements ?? []).map(sanitizeResumeText).filter(Boolean),
   };
 }
 

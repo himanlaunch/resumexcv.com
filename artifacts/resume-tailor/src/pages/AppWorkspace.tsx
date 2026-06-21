@@ -2832,7 +2832,8 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
 function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; jobTitle?: string; jobCompany?: string }) {
   resume = sanitizeResumeForExport(resume);
   const name = resume.contact?.name ?? "Resume";
-  const contactParts = [resume.contact?.email, resume.contact?.location, resume.contact?.linkedin, resume.contact?.github].filter(Boolean);
+  const contactParts = [resume.contact?.phone, resume.contact?.email, resume.contact?.location, resume.contact?.linkedin, resume.contact?.github].filter(Boolean);
+  const sectionStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 };
 
   return (
     <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 13, lineHeight: 1.6, color: "#222", padding: "28px 32px", background: "white", borderRadius: 8, border: "1px solid #E5E7EB" }}>
@@ -2848,28 +2849,31 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
 
       {resume.summary && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>Summary</div>
+          <div style={sectionStyle}>Summary</div>
           <p style={{ fontSize: 13, color: "#222", margin: 0 }}>{resume.summary}</p>
         </>
       )}
 
       {(resume.skills ?? []).length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>Skills</div>
+          <div style={sectionStyle}>Skills</div>
           <p style={{ fontSize: 12.5, color: "#333", margin: 0 }}>{resume.skills!.join(" · ")}</p>
         </>
       )}
 
       {(resume.experience ?? []).length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>Experience</div>
+          <div style={sectionStyle}>Experience</div>
           {resume.experience!.map((exp, i) => (
             <div key={i} style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <strong style={{ fontSize: 13.5, color: "#111" }}>{exp.title}</strong>
+                <strong style={{ fontSize: 13.5, color: "#111" }}>{exp.company}</strong>
                 <span style={{ fontSize: 12, color: "#666" }}>{exp.period}</span>
               </div>
-              <div style={{ fontSize: 12.5, color: "#444", marginBottom: 4 }}>{exp.company}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <em style={{ fontSize: 12.5, color: "#444" }}>{exp.title}</em>
+                {exp.location && <span style={{ fontSize: 11.5, color: "#888" }}>{exp.location}</span>}
+              </div>
               <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {(exp.bullets ?? []).map((b, bi) => (
                   <li key={bi} style={{ fontSize: 13, color: "#222", marginBottom: 3 }}>{b}</li>
@@ -2882,11 +2886,17 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
 
       {(resume.education ?? []).length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>Education</div>
+          <div style={sectionStyle}>Education</div>
           {resume.education!.map((e, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ fontSize: 13, color: "#111" }}><strong>{e.degree}</strong>, {e.school}</span>
-              <span style={{ fontSize: 12, color: "#666" }}>{e.year}</span>
+            <div key={i} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <strong style={{ fontSize: 13, color: "#111" }}>{e.school}</strong>
+                <span style={{ fontSize: 12, color: "#666" }}>{e.year}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <em style={{ fontSize: 12.5, color: "#444" }}>{e.degree}</em>
+                {e.location && <span style={{ fontSize: 11.5, color: "#888" }}>{e.location}</span>}
+              </div>
             </div>
           ))}
         </>
@@ -2894,9 +2904,18 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
 
       {(resume.certifications ?? []).length > 0 && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 }}>Certifications</div>
+          <div style={sectionStyle}>Certifications</div>
           {resume.certifications!.map((c, i) => (
             <div key={i} style={{ fontSize: 13, color: "#222", marginBottom: 3 }}>• {c}</div>
+          ))}
+        </>
+      )}
+
+      {(resume.achievements ?? []).length > 0 && (
+        <>
+          <div style={sectionStyle}>Achievements</div>
+          {resume.achievements!.map((a, i) => (
+            <div key={i} style={{ fontSize: 13, color: "#222", marginBottom: 3 }}>• {a}</div>
           ))}
         </>
       )}
@@ -2935,6 +2954,7 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
 
   // ── Contact line ──
   const contactParts = [
+    resume.contact?.phone,
     resume.contact?.email,
     resume.contact?.location,
     resume.contact?.linkedin,
@@ -2990,20 +3010,28 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
     sectionHead("Experience");
     for (const exp of resume.experience!) {
       bp(16);
+      // Company (bold) on left, period on right
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10.5);
       setColor(10, 10, 10);
-      pdf.text(exp.title, mL, y);
+      pdf.text(exp.company, mL, y);
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(9.5);
       setColor(90, 90, 90);
       pdf.text(exp.period ?? "", pageW - mR, y, { align: "right" });
       y += 4.8;
 
+      // Title (italic) on left, location on right
       pdf.setFont("helvetica", "italic");
       pdf.setFontSize(10);
       setColor(55, 55, 55);
-      pdf.text(exp.company, mL, y);
+      pdf.text(exp.title, mL, y);
+      if (exp.location) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9.5);
+        setColor(90, 90, 90);
+        pdf.text(exp.location, pageW - mR, y, { align: "right" });
+      }
       y += 4.5;
 
       pdf.setFont("helvetica", "normal");
@@ -3031,20 +3059,28 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
     sectionHead("Education");
     for (const edu of resume.education!) {
       bp(12);
+      // School (bold) on left, year on right
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10.5);
       setColor(10, 10, 10);
-      pdf.text(edu.degree, mL, y);
+      pdf.text(edu.school ?? "", mL, y);
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(9.5);
       setColor(90, 90, 90);
       pdf.text(edu.year ?? "", pageW - mR, y, { align: "right" });
       y += 4.8;
-      if (edu.school) {
+      // Degree (italic) on left, location on right
+      if (edu.degree) {
         pdf.setFont("helvetica", "italic");
         pdf.setFontSize(10);
         setColor(55, 55, 55);
-        pdf.text(edu.school, mL, y);
+        pdf.text(edu.degree, mL, y);
+        if (edu.location) {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(9.5);
+          setColor(90, 90, 90);
+          pdf.text(edu.location, pageW - mR, y, { align: "right" });
+        }
         y += 4.8;
       }
       y += 2;
@@ -3063,6 +3099,27 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
         bp(5);
         if (i === 0) {
           pdf.text("\u2022", mL + 0.5, y);
+          pdf.text(lines[i], mL + 5, y);
+        } else {
+          pdf.text(lines[i], mL + 5, y);
+        }
+        y += 4.8;
+      }
+    }
+  }
+
+  // ── Achievements ──
+  if ((resume.achievements ?? []).length > 0) {
+    sectionHead("Achievements");
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    setColor(20, 20, 20);
+    for (const ach of resume.achievements!) {
+      const lines = pdf.splitTextToSize(ach, textW - 5);
+      for (let i = 0; i < lines.length; i++) {
+        bp(5);
+        if (i === 0) {
+          pdf.text("•", mL + 0.5, y);
           pdf.text(lines[i], mL + 5, y);
         } else {
           pdf.text(lines[i], mL + 5, y);
@@ -3098,6 +3155,7 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
 
   // ── Contact line ──
   const contactParts = [
+    resume.contact?.phone,
     resume.contact?.email,
     resume.contact?.location,
     resume.contact?.linkedin,
@@ -3133,19 +3191,23 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
   if ((resume.experience ?? []).length > 0) {
     children.push(sectionHeading("Experience"));
     for (const exp of resume.experience!) {
-      // Title (left) + Period (right) on one line via tab stop
+      // Company (bold, left) + Period (right) on one line via tab stop
       children.push(new Paragraph({
         children: [
-          new TextRun({ text: exp.title, bold: true, size: 24, font: "Calibri", color: "0A0A0A" }),
+          new TextRun({ text: exp.company, bold: true, size: 24, font: "Calibri", color: "0A0A0A" }),
           new TextRun({ text: "\t" }),
           new TextRun({ text: exp.period ?? "", size: 20, font: "Calibri", color: "555555" }),
         ],
         tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
         spacing: { before: 100, after: 30 },
       }));
-      // Company in italics
+      // Title (italic, left) + Location (right)
       children.push(new Paragraph({
-        children: [new TextRun({ text: exp.company, italics: true, size: 22, font: "Calibri", color: "333333" })],
+        children: [
+          new TextRun({ text: exp.title, italics: true, size: 22, font: "Calibri", color: "333333" }),
+          ...(exp.location ? [new TextRun({ text: "\t" }), new TextRun({ text: exp.location, size: 20, font: "Calibri", color: "555555" })] : []),
+        ],
+        tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
         spacing: { after: 60 },
       }));
       // Bullets
@@ -3163,18 +3225,24 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
   if ((resume.education ?? []).length > 0) {
     children.push(sectionHeading("Education"));
     for (const edu of resume.education!) {
+      // School (bold, left) + Year (right)
       children.push(new Paragraph({
         children: [
-          new TextRun({ text: edu.degree, bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
+          new TextRun({ text: edu.school ?? "", bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
           new TextRun({ text: "\t" }),
           new TextRun({ text: edu.year ?? "", size: 20, font: "Calibri", color: "555555" }),
         ],
         tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
         spacing: { before: 80, after: 30 },
       }));
-      if (edu.school) {
+      // Degree (italic, left) + Location (right)
+      if (edu.degree) {
         children.push(new Paragraph({
-          children: [new TextRun({ text: edu.school, italics: true, size: 22, font: "Calibri", color: "333333" })],
+          children: [
+            new TextRun({ text: edu.degree, italics: true, size: 22, font: "Calibri", color: "333333" }),
+            ...(edu.location ? [new TextRun({ text: "\t" }), new TextRun({ text: edu.location, size: 20, font: "Calibri", color: "555555" })] : []),
+          ],
+          tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
           spacing: { after: 60 },
         }));
       }
@@ -3187,6 +3255,18 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
     for (const cert of resume.certifications!) {
       children.push(new Paragraph({
         children: [new TextRun({ text: cert, size: 22, font: "Calibri", color: "111111" })],
+        bullet: { level: 0 },
+        spacing: { after: 30 },
+      }));
+    }
+  }
+
+  // ── Achievements ──
+  if ((resume.achievements ?? []).length > 0) {
+    children.push(sectionHeading("Achievements"));
+    for (const ach of resume.achievements!) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: ach, size: 22, font: "Calibri", color: "111111" })],
         bullet: { level: 0 },
         spacing: { after: 30 },
       }));
@@ -3291,7 +3371,7 @@ function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; ta
 
   const panel = (res: ResumeData, side: "left" | "right") => {
     const styleFn = side === "left" ? leftStyle : rightStyle;
-    const contactParts = [res.contact?.email, res.contact?.location, res.contact?.linkedin, res.contact?.github].filter(Boolean);
+    const contactParts = [res.contact?.phone, res.contact?.email, res.contact?.location, res.contact?.linkedin, res.contact?.github].filter(Boolean);
     return (
       <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 12, lineHeight: 1.55, color: "#222", padding: "20px 22px", background: "white", flex: 1, minWidth: 0 }}>
         <div style={{ textAlign: "center", marginBottom: 14 }}>
@@ -3325,10 +3405,13 @@ function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; ta
             {res.experience!.map((exp, i) => (
               <div key={i} style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <strong style={{ fontSize: 12.5, color: "#111" }}>{exp.title}</strong>
+                  <strong style={{ fontSize: 12.5, color: "#111" }}>{exp.company}</strong>
                   <span style={{ fontSize: 11, color: "#666" }}>{exp.period}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: "#444", marginBottom: 3 }}>{exp.company}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
+                  <em style={{ fontSize: 11.5, color: "#444" }}>{exp.title}</em>
+                  {exp.location && <span style={{ fontSize: 11, color: "#888" }}>{exp.location}</span>}
+                </div>
                 <ul style={{ margin: 0, paddingLeft: 16 }}>
                   {(exp.bullets ?? []).map((b, bi) => (
                     <li key={bi} style={{ fontSize: 12, color: "#222", marginBottom: 2, ...styleFn(b) }}>{b}</li>
@@ -3343,11 +3426,15 @@ function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; ta
           <>
             {sectionHdr("Education")}
             {res.education!.map((e, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                <span style={{ fontSize: 12, color: "#111", ...styleFn(`${e.degree}, ${e.school}`) }}>
-                  <strong>{e.degree}</strong>, {e.school}
-                </span>
-                <span style={{ fontSize: 11, color: "#666" }}>{e.year}</span>
+              <div key={i} style={{ marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <strong style={{ fontSize: 12, color: "#111", ...styleFn(`${e.degree}, ${e.school}`) }}>{e.school}</strong>
+                  <span style={{ fontSize: 11, color: "#666" }}>{e.year}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <em style={{ fontSize: 11.5, color: "#444" }}>{e.degree}</em>
+                  {e.location && <span style={{ fontSize: 11, color: "#888" }}>{e.location}</span>}
+                </div>
               </div>
             ))}
           </>
@@ -3358,6 +3445,15 @@ function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; ta
             {sectionHdr("Certifications")}
             {res.certifications!.map((c, i) => (
               <div key={i} style={{ fontSize: 12, color: "#222", marginBottom: 2, ...styleFn(c) }}>• {c}</div>
+            ))}
+          </>
+        )}
+
+        {(res.achievements ?? []).length > 0 && (
+          <>
+            {sectionHdr("Achievements")}
+            {res.achievements!.map((a, i) => (
+              <div key={i} style={{ fontSize: 12, color: "#222", marginBottom: 2, ...styleFn(a) }}>• {a}</div>
             ))}
           </>
         )}
