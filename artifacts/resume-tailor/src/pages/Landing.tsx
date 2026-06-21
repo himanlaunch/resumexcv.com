@@ -202,7 +202,7 @@ function HeroSection() {
                 See how it works
               </a>
             </div>
-            <p className="text-sm" style={{ color: "#888" }}>Tailor up to 5 resumes free. No card required.</p>
+            <p className="text-sm" style={{ color: "#888" }}>Tailor up to 10 resumes free. No card required.</p>
           </div>
 
           <div className="relative animate-fade-in min-w-0 w-full">
