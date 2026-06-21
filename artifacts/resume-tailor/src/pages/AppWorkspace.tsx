@@ -2923,7 +2923,7 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   pdf.save(`${personName.replace(/\s+/g, "_")}_${job.company.replace(/\s+/g, "_")}.pdf`);
 }
 
-async function handleDocxDownload(resume: ResumeData, job: JobResult) {
+async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> {
   const { Document, Packer, Paragraph, TextRun, AlignmentType, TabStopType } = await import("docx");
   resume = sanitizeResumeForExport(resume);
 
@@ -3052,11 +3052,39 @@ async function handleDocxDownload(resume: ResumeData, job: JobResult) {
     }],
   });
 
-  const blob = await Packer.toBlob(doc);
+  return Packer.toBlob(doc);
+}
+
+async function handleDocxDownload(resume: ResumeData, job: JobResult) {
+  const blob = await buildDocxBlob(resume, job);
+  resume = sanitizeResumeForExport(resume);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = `${(resume.contact?.name ?? "resume").replace(/\s+/g, "_")}_${job.company.replace(/\s+/g, "_")}.docx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function handleDownloadAllDocx(jobs: JobResult[], tailoredResumes: Record<string, ResumeData>, baseResume: ResumeData) {
+  const { zipSync } = await import("fflate");
+  const files: Record<string, Uint8Array> = {};
+  await Promise.all(
+    jobs.map(async (job) => {
+      const r = tailoredResumes[job.id] ?? baseResume;
+      const blob = await buildDocxBlob(r, job);
+      const arr = new Uint8Array(await blob.arrayBuffer());
+      const sanitized = sanitizeResumeForExport(r);
+      const name = `${(sanitized.contact?.name ?? "resume").replace(/\s+/g, "_")}_${job.company.replace(/[^a-zA-Z0-9]/g, "_")}.docx`;
+      files[name] = arr;
+    })
+  );
+  const zipped = zipSync(files);
+  const blob = new Blob([zipped], { type: "application/zip" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "tailored_resumes.zip";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -3237,6 +3265,7 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
   const [previewing, setPreviewing] = useState<Set<string>>(new Set());
   const [diffViewing, setDiffViewing] = useState<Set<string>>(new Set());
   const [downloadingDocx, setDownloadingDocx] = useState<Set<string>>(new Set());
+  const [downloadingAll, setDownloadingAll] = useState(false);
   const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
   const [sharing, setSharing] = useState<Set<string>>(new Set());
   const [linkCopied, setLinkCopied] = useState<Set<string>>(new Set());
@@ -3566,13 +3595,29 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
           })}
         </div>
 
-        {exported.size > 1 && (
+        {selectedJobs.length > 1 && (
           <div className="mb-8 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ backgroundColor: "#ECFFE0", border: "1px solid rgba(0,240,160,0.3)" }}>
             <div>
-              <p className="font-semibold text-sm" style={{ color: "#005A3D" }}>Download all {exported.size} resumes</p>
-              <p className="text-xs" style={{ color: "#00c447" }}>Packaged as a .zip</p>
+              <p className="font-semibold text-sm" style={{ color: "#005A3D" }}>Download all {selectedJobs.length} resumes</p>
+              <p className="text-xs" style={{ color: "#00c447" }}>Packaged as a single .zip file</p>
             </div>
-            <button className="btn-dark text-sm w-full sm:w-auto"><Download className="w-4 h-4" /> Download All (.zip)</button>
+            <button
+              className="btn-dark text-sm w-full sm:w-auto flex items-center justify-center gap-2"
+              disabled={downloadingAll}
+              onClick={async () => {
+                setDownloadingAll(true);
+                try {
+                  await handleDownloadAllDocx(selectedJobs, tailoredResumes, resume);
+                  setExported(new Set(selectedJobs.map(j => j.id)));
+                } finally {
+                  setDownloadingAll(false);
+                }
+              }}
+            >
+              {downloadingAll
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Packaging…</>
+                : <><Download className="w-4 h-4" /> Download All (.zip)</>}
+            </button>
           </div>
         )}
 
