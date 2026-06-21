@@ -342,12 +342,13 @@ Preserve the candidate's full career history and factual detail. Do not optimize
 
 {
   "resume": {
-    "contact": { "name": "...", "email": "...", "location": "...", "linkedin": "...", "github": "..." },
+    "contact": { "name": "...", "phone": "...", "email": "...", "location": "...", "linkedin": "...", "github": "..." },
     "summary": "...",
     "skills": ["..."],
-    "experience": [{ "title": "...", "company": "...", "period": "...", "bullets": ["..."] }],
-    "education": [{ "degree": "...", "school": "...", "year": "..." }],
-    "certifications": ["..."]
+    "experience": [{ "title": "...", "company": "...", "location": "...", "period": "...", "bullets": ["..."] }],
+    "education": [{ "degree": "...", "school": "...", "location": "...", "year": "..." }],
+    "certifications": ["..."],
+    "achievements": ["..."]
   },
   "recommendations": {
     "titles": [{ "title": "...", "reason": "..." }],
@@ -363,6 +364,11 @@ Rules:
 - Preserve all meaningful bullet details, metrics, technologies, scope, domains, tools, and outcomes from each role.
 - Do not truncate bullets or collapse multiple roles together.
 - If the resume does not have an explicit summary, write a concise professional summary grounded only in the resume text.
+- "contact.phone": extract the candidate's phone number exactly as written.
+- "experience[].location": extract the city/country where each role was based (e.g. "Dublin, Ireland", "Remote, USA"). Use empty string if not stated.
+- "education[].location": extract the city/country of the school (e.g. "St. Louis, MO"). Use empty string if not stated.
+- "achievements": capture items from any Achievements or Awards section (promotions, scholarships, rankings, honours). Do NOT put these in certifications. Certifications are only professional credentials and training certificates.
+- "certifications": only professional certifications, licenses, and training programs — NOT achievements or awards.
 
 RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
