@@ -181,7 +181,15 @@ router.get("/search", async (req, res) => {
     const fetchPage = async (city: string, nextPageToken?: string): Promise<SerpResponse> => {
       const r = await fetch(`https://serpapi.com/search?${buildParams(city, nextPageToken)}`);
       if (!r.ok) {
-        const text = await r.text();
+        const text = await r.text().catch(() => "");
+        if (r.status === 429) {
+          logger.warn({ city }, "SerpAPI rate limit hit");
+          throw Object.assign(new Error("SerpAPI rate limit"), { status: 429, retryAfter: r.headers.get("retry-after") ?? "60" });
+        }
+        if (r.status === 401 || r.status === 403) {
+          logger.error({ city, status: r.status }, "SerpAPI auth/quota error");
+          throw Object.assign(new Error("SerpAPI quota exceeded"), { status: r.status });
+        }
         logger.warn({ city, status: r.status, text }, "SerpAPI page error");
         return { jobs_results: [], serpapi_pagination: undefined, error: undefined };
       }
@@ -258,7 +266,23 @@ router.get("/search", async (req, res) => {
       pagesFetched,
       pageSize: SERPAPI_PAGE_SIZE,
     });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.status === 429) {
+      logger.warn({ retryAfter: err.retryAfter }, "SerpAPI rate limit — returning 429 to client");
+      res.setHeader("Retry-After", err.retryAfter ?? "60");
+      return res.status(429).json({
+        error: "Job search is temporarily rate-limited. Please wait a moment and try again.",
+        code: "SERPAPI_RATE_LIMITED",
+        retryAfter: Number(err.retryAfter ?? 60),
+      });
+    }
+    if (err?.status === 401 || err?.status === 403) {
+      logger.error({ status: err.status }, "SerpAPI quota exhausted");
+      return res.status(503).json({
+        error: "Job search is temporarily unavailable. Please try again later.",
+        code: "SERPAPI_QUOTA_EXCEEDED",
+      });
+    }
     logger.error({ err }, "Job search error");
     return res.status(500).json({ error: "Internal error during job search" });
   }
