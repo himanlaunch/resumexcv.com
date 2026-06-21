@@ -2412,6 +2412,46 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
   const totalConfirm = rows.filter(r => r.status === "confirm").length;
   const confirmedCount = rows.filter(r => r.status === "confirm" && r.confirmed).length;
   const progress = totalConfirm === 0 ? (activeState?.status === "done" ? 100 : 0) : Math.round((confirmedCount / totalConfirm) * 100);
+
+  // Compute projected match score based on which proposed changes are accepted.
+  // Builds a virtual resume with accepted/confirmed proposed text, then re-runs computeMatchScore.
+  const activeJob = selectedJobs.find(j => j.id === activeJobId);
+  const projectedScore = useMemo(() => {
+    if (!activeJob || !activeState?.result) return null;
+    // Build a projected resume by applying accepted rows
+    const projectedResume: ResumeData = {
+      ...resume,
+      summary: resume.summary,
+      skills: [...(resume.skills ?? [])],
+      experience: (resume.experience ?? []).map(e => ({ ...e, bullets: [...(e.bullets ?? [])] })),
+    };
+    for (const row of rows) {
+      const text = row.customText ?? row.proposed ?? "";
+      if (!text || !row.confirmed) continue;
+      if (row.section === "Summary") {
+        projectedResume.summary = text;
+      } else if (row.section === "Skills") {
+        // Inject new skill terms
+        const newSkills = text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+        projectedResume.skills = [...new Set([...(projectedResume.skills ?? []), ...newSkills])];
+      } else {
+        // Experience bullet — append to relevant experience entry
+        projectedResume.experience = (projectedResume.experience ?? []).map(e => {
+          const sectionName = `Experience - ${e.company}`;
+          if (row.section !== sectionName) return e;
+          const existingIdx = e.bullets?.findIndex(b => b === row.original);
+          if (existingIdx !== undefined && existingIdx >= 0) {
+            const bullets = [...(e.bullets ?? [])];
+            bullets[existingIdx] = text;
+            return { ...e, bullets };
+          }
+          return { ...e, bullets: [...(e.bullets ?? []), text] };
+        });
+      }
+    }
+    return computeMatchScore(activeJob, projectedResume);
+  }, [activeJob, activeState?.result, rows, resume]);
+
   // All jobs must be done and have zero pending confirms before export unlocks
   const allJobsDone = selectedJobs.every(j => jobStates[j.id]?.status === "done");
   const totalPendingAllJobs = selectedJobs.reduce((sum, j) => {
@@ -2564,12 +2604,25 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         {/* Match score + seniority */}
         {activeState?.result && (
           <div className="flex flex-wrap gap-3 mb-5">
-            <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl">
-              <div className="text-2xl font-bold font-heading" style={{ color: activeState.result.matchScore >= 80 ? "#00c447" : activeState.result.matchScore >= 65 ? "#D97706" : "#EF4444" }}>
-                {activeState.result.matchScore}%
+            {/* Projected score (live as user accepts/rejects) */}
+            {projectedScore !== null && (
+              <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl" style={{ border: projectedScore >= 85 ? "1.5px solid #00c447" : undefined }}>
+                <div>
+                  <div className="text-2xl font-bold font-heading" style={{ color: projectedScore >= 85 ? "#00c447" : projectedScore >= 70 ? "#D97706" : "#EF4444" }}>
+                    {projectedScore}%
+                  </div>
+                  <div className="text-xs mt-0.5" style={{ color: projectedScore >= 85 ? "#00c447" : "#888" }}>
+                    {projectedScore >= 85 ? "★ " : ""}Projected match
+                  </div>
+                </div>
+                <div className="text-xs pl-3" style={{ borderLeft: "1px solid #E5E8EA", color: "#aaa" }}>
+                  Baseline<br />
+                  <span style={{ color: activeState.result.matchScore >= 80 ? "#00c447" : activeState.result.matchScore >= 65 ? "#D97706" : "#EF4444" }}>
+                    {activeState.result.matchScore}%
+                  </span>
+                </div>
               </div>
-              <div className="text-xs" style={{ color: "#888" }}>Resume–Job<br />Match Score</div>
-            </div>
+            )}
             <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl">
               <div className="text-sm font-bold capitalize" style={{ color: activeState.result.seniorityMatch === "perfect" ? "#00c447" : activeState.result.seniorityMatch === "stretch" ? "#D97706" : "#6B7280" }}>
                 {activeState.result.seniorityMatch}
