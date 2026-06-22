@@ -3149,6 +3149,19 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
 
 // ── Step 4: Export ────────────────────────────────────────────────────────────
 
+// Returns structured skill groups: prefers explicit skillGroups, falls back to parsing
+// "Category: skill1, skill2" patterns from the flat skills array.
+function resolveSkillGroups(resume: ResumeData): { category: string; skills: string[] }[] {
+  if ((resume.skillGroups ?? []).length > 0) return resume.skillGroups!;
+  const flat = resume.skills ?? [];
+  const derived: { category: string; skills: string[] }[] = [];
+  for (const item of flat) {
+    const m = item.match(/^([^:]{3,40}):\s*(.+)$/);
+    if (m) derived.push({ category: m[1].trim(), skills: m[2].split(/\s*,\s*/).filter(Boolean) });
+  }
+  return derived;
+}
+
 function buildPlainTextResume(a: ResumeData): string {
   a = sanitizeResumeForExport(a);
   const lines: string[] = [];
@@ -3159,8 +3172,9 @@ function buildPlainTextResume(a: ResumeData): string {
   lines.push(a.summary ?? "");
   lines.push("");
   lines.push("SKILLS");
-  if ((a.skillGroups ?? []).length > 0) {
-    for (const grp of a.skillGroups!) lines.push(`${grp.category}: ${grp.skills.join(", ")}`);
+  const ptGroups = resolveSkillGroups(a);
+  if (ptGroups.length > 0) {
+    for (const grp of ptGroups) lines.push(`${grp.category}: ${grp.skills.join(", ")}`);
   } else {
     lines.push(a.skills?.join(", ") ?? "");
   }
@@ -3200,6 +3214,7 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
     contact: { ...base.contact },
     summary: base.summary,
     skills: [...(base.skills ?? [])],
+    skillGroups: (base.skillGroups ?? []).map(g => ({ ...g, skills: [...g.skills] })),
     experience: (base.experience ?? []).map(e => ({ ...e, bullets: [...(e.bullets ?? [])] })),
     education: (base.education ?? []).map(e => ({ ...e })),
     certifications: [...(base.certifications ?? [])],
@@ -3340,19 +3355,22 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
         </>
       )}
 
-      {((resume.skillGroups ?? []).length > 0 || (resume.skills ?? []).length > 0) && (
-        <>
-          <div style={sectionStyle}>Skills</div>
-          {(resume.skillGroups ?? []).length > 0
-            ? (resume.skillGroups!.map((grp, i) => (
-                <p key={i} style={{ fontSize: 12.5, color: "#333", margin: "0 0 3px 0" }}>
-                  <strong style={{ color: "#111" }}>{grp.category}:</strong>{" "}{grp.skills.join(", ")}
-                </p>
-              )))
-            : <p style={{ fontSize: 12.5, color: "#333", margin: 0 }}>{resume.skills!.join(" · ")}</p>
-          }
-        </>
-      )}
+      {(() => {
+        const previewGroups = resolveSkillGroups(resume);
+        return (previewGroups.length > 0 || (resume.skills ?? []).length > 0) && (
+          <>
+            <div style={sectionStyle}>Skills</div>
+            {previewGroups.length > 0
+              ? previewGroups.map((grp, i) => (
+                  <p key={i} style={{ fontSize: 12.5, color: "#333", margin: "0 0 3px 0" }}>
+                    <strong style={{ color: "#111" }}>{grp.category}:</strong>{" "}{grp.skills.join(", ")}
+                  </p>
+                ))
+              : <p style={{ fontSize: 12.5, color: "#333", margin: 0 }}>{resume.skills!.join(" · ")}</p>
+            }
+          </>
+        );
+      })()}
 
       {(resume.experience ?? []).length > 0 && (
         <>
@@ -3530,13 +3548,14 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   }
 
   // ── Skills ──
-  const hasSkillGroups = (resume.skillGroups ?? []).length > 0;
+  const pdfSkillGroups = resolveSkillGroups(resume);
+  const hasSkillGroups = pdfSkillGroups.length > 0;
   if (hasSkillGroups || (resume.skills ?? []).length > 0) {
     sectionHead("Skills");
     pdf.setFontSize(10);
     setColor(20, 20, 20);
     if (hasSkillGroups) {
-      for (const grp of resume.skillGroups!) {
+      for (const grp of pdfSkillGroups) {
         bp(10);
         const label = pdfSafeText(grp.category) + ": ";
         const skillsText = pdfSafeText(grp.skills.join(", "));
@@ -3787,11 +3806,12 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
   }
 
   // ── Skills ── grouped if available, flat fallback
-  const hasDocxGroups = (resume.skillGroups ?? []).length > 0;
+  const docxSkillGroups = resolveSkillGroups(resume);
+  const hasDocxGroups = docxSkillGroups.length > 0;
   if (hasDocxGroups || (resume.skills ?? []).length > 0) {
     children.push(sectionHeading("Skills"));
     if (hasDocxGroups) {
-      for (const grp of resume.skillGroups!) {
+      for (const grp of docxSkillGroups) {
         children.push(new Paragraph({
           children: [
             new TextRun({ text: `${grp.category}: `, size: 22, font: "Calibri", bold: true, color: "111111" }),
