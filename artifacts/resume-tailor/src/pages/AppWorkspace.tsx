@@ -1601,22 +1601,6 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              {[
-                { title: "Contact", icon: <FileText className="w-4 h-4" />, content: <div className="space-y-1 text-sm" style={{ color: "#444" }}><p className="font-semibold" style={{ color: "#0A0A0A" }}>{resume.contact?.name}</p><p>{resume.contact?.email}</p><p>{resume.contact?.location}</p><p style={{ color: "#00c447" }}>{resume.contact?.linkedin}</p></div> },
-                { title: "Skills", icon: <Zap className="w-4 h-4" />, content: <div className="flex flex-wrap gap-1.5">{resume.skills?.map(s => <span key={s} className="chip-mint">{s}</span>)}</div> },
-                { title: "Experience", icon: <Briefcase className="w-4 h-4" />, content: <>{resume.experience?.map(e => <div key={`${e.company}-${e.period}`} className="mb-2"><p className="text-sm font-semibold" style={{ color: "#0A0A0A" }}>{e.title}</p><p className="text-xs" style={{ color: "#888" }}>{e.company} · {e.period}</p></div>)}</> },
-                { title: "Certifications", icon: <Shield className="w-4 h-4" />, content: <>{(resume.certifications?.length ? resume.certifications : ["—"]).map(c => <div key={c} className="flex items-center gap-2"><Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00c447" }} /><p className="text-sm" style={{ color: "#444" }}>{c}</p></div>)}</> },
-              ].map(({ title, icon, content }) => (
-                <div key={title} className="card-base p-5 rounded-2xl">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>{icon}</div>
-                    <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>{title}</h3>
-                  </div>
-                  {content}
-                </div>
-              ))}
-            </div>
             <GapSuggestionPanel
               resume={resume}
               onAddExperience={(entry) => {
