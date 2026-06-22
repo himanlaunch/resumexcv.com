@@ -1267,12 +1267,18 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
 
   const confirmParsed = (editedResume: ResumeData) => {
     if (!reviewing) return;
-    onParsed(editedResume, reviewing.recommendations, reviewing.fileName);
-    setRecommendations(reviewing.recommendations);
-    setSelectedTitles(new Set(reviewing.recommendations.titles.slice(0, 3).map(t => t.title)));
-    setSelectedLocations([]);
-    setReviewing(null);
-    setUploaded(true);
+    if (uploaded) {
+      // Re-editing an already-confirmed resume — just update the data, preserve title/location selections
+      onUpdateResume(editedResume);
+      setReviewing(null);
+    } else {
+      onParsed(editedResume, reviewing.recommendations, reviewing.fileName);
+      setRecommendations(reviewing.recommendations);
+      setSelectedTitles(new Set(reviewing.recommendations.titles.slice(0, 3).map(t => t.title)));
+      setSelectedLocations([]);
+      setReviewing(null);
+      setUploaded(true);
+    }
   };
 
   const handleClearAndReupload = () => {
@@ -1369,7 +1375,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
         parsed={reviewing.resume}
         fileName={reviewing.fileName}
         onConfirm={confirmParsed}
-        onRetry={() => { setReviewing(null); setFileName(null); }}
+        onRetry={() => { setReviewing(null); if (!uploaded) setFileName(null); }}
       />
     );
   }
@@ -1453,8 +1459,12 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                 <p className="font-semibold text-sm" style={{ color: "#0A0A0A" }}>Career Vault ready — resume parsed</p>
                 <p className="text-xs truncate" style={{ color: "#555" }}>{fileName ?? "resume"} · Confirm job targets below, then search for live postings</p>
               </div>
-              <button className="text-xs font-semibold flex-shrink-0 underline self-start sm:self-auto" style={{ color: "#555" }}
-                onClick={handleClearAndReupload}>Clear &amp; re-upload</button>
+              <div className="flex items-center gap-3 flex-shrink-0 self-start sm:self-auto">
+                <button className="text-xs font-semibold underline" style={{ color: "#005A3D" }}
+                  onClick={() => setReviewing({ resume, recommendations, fileName })}>Edit details</button>
+                <button className="text-xs font-semibold underline" style={{ color: "#555" }}
+                  onClick={handleClearAndReupload}>Clear &amp; re-upload</button>
+              </div>
             </div>
 
             <div className="mb-5">
