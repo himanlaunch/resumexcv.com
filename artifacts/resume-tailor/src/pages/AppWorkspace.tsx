@@ -1267,12 +1267,18 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
 
   const confirmParsed = (editedResume: ResumeData) => {
     if (!reviewing) return;
-    onParsed(editedResume, reviewing.recommendations, reviewing.fileName);
-    setRecommendations(reviewing.recommendations);
-    setSelectedTitles(new Set(reviewing.recommendations.titles.slice(0, 3).map(t => t.title)));
-    setSelectedLocations([]);
-    setReviewing(null);
-    setUploaded(true);
+    if (uploaded) {
+      // Re-editing an already-confirmed resume — just update the data, preserve title/location selections
+      onUpdateResume(editedResume);
+      setReviewing(null);
+    } else {
+      onParsed(editedResume, reviewing.recommendations, reviewing.fileName);
+      setRecommendations(reviewing.recommendations);
+      setSelectedTitles(new Set(reviewing.recommendations.titles.slice(0, 3).map(t => t.title)));
+      setSelectedLocations([]);
+      setReviewing(null);
+      setUploaded(true);
+    }
   };
 
   const handleClearAndReupload = () => {
@@ -1369,7 +1375,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
         parsed={reviewing.resume}
         fileName={reviewing.fileName}
         onConfirm={confirmParsed}
-        onRetry={() => { setReviewing(null); setFileName(null); }}
+        onRetry={() => { setReviewing(null); if (!uploaded) setFileName(null); }}
       />
     );
   }
@@ -1453,11 +1459,19 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                 <p className="font-semibold text-sm" style={{ color: "#0A0A0A" }}>Career Vault ready — resume parsed</p>
                 <p className="text-xs truncate" style={{ color: "#555" }}>{fileName ?? "resume"} · Confirm job targets below, then search for live postings</p>
               </div>
-              <button className="text-xs font-semibold flex-shrink-0 underline self-start sm:self-auto" style={{ color: "#555" }}
-                onClick={handleClearAndReupload}>Clear &amp; re-upload</button>
+              <div className="flex items-center gap-3 flex-shrink-0 self-start sm:self-auto">
+                <button className="text-xs font-semibold underline" style={{ color: "#005A3D" }}
+                  onClick={() => setReviewing({ resume, recommendations, fileName })}>Edit details</button>
+                <button className="text-xs font-semibold underline" style={{ color: "#555" }}
+                  onClick={handleClearAndReupload}>Clear &amp; re-upload</button>
+              </div>
             </div>
 
-            <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] gap-5">
+            <div className="mb-5">
+              <DirectJobLinksPanel enabled={uploaded} credits={credits} onBuyCredits={onBuyCredits} onJobsFetched={onDirectJobs} />
+            </div>
+
+            <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.75fr)] gap-5">
               <div className="card-base rounded-2xl overflow-hidden">
                 <div className="px-4 md:px-5 py-4 flex flex-wrap items-center gap-2" style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #F0F0F0" }}>
                   <Sparkles className="w-4 h-4" style={{ color: "#00c447" }} />
@@ -1566,22 +1580,25 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                     </button>
                   </div>
                 </div>
-                <div className="px-4 md:px-5 pb-4">
+              </div>
+
+              {/* Right column: Preferred locations + Search */}
+              <div className="card-base rounded-2xl p-5 flex flex-col gap-4">
+                <div>
                   <p className="text-xs font-semibold mb-2" style={{ color: "#888" }}>Preferred location(s)</p>
                   <LocationPicker selected={selectedLocations} onChange={setSelectedLocations} maxLocations={3} />
                 </div>
-                <div className="px-4 md:px-5 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="mt-auto flex flex-col gap-2">
                   <p className="text-xs" style={{ color: "#888" }}>
                     {selectedTitles.size} title{selectedTitles.size !== 1 ? "s" : ""} selected
                     {selectedLocations.length > 0 ? ` · ${selectedLocations.join(", ")}` : ""}
                   </p>
-                  <button className="btn-mint text-sm w-full sm:w-auto" disabled={selectedTitles.size === 0}
+                  <button className="btn-mint text-sm w-full" disabled={selectedTitles.size === 0}
                     onClick={() => onNext(Array.from(selectedTitles), selectedLocations)}
                     style={{ opacity: selectedTitles.size === 0 ? 0.4 : 1 }}
                   ><Search className="w-4 h-4" /> Search live jobs <ArrowRight className="w-4 h-4" /></button>
                 </div>
               </div>
-              <DirectJobLinksPanel enabled={uploaded} credits={credits} onBuyCredits={onBuyCredits} onJobsFetched={onDirectJobs} />
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
