@@ -3152,13 +3152,32 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
 // Returns structured skill groups: prefers explicit skillGroups, falls back to parsing
 // "Category: skill1, skill2" patterns from the flat skills array.
 function resolveSkillGroups(resume: ResumeData): { category: string; skills: string[] }[] {
-  if ((resume.skillGroups ?? []).length > 0) return resume.skillGroups!;
-  const flat = resume.skills ?? [];
-  const derived: { category: string; skills: string[] }[] = [];
-  for (const item of flat) {
-    const m = item.match(/^([^:]{3,40}):\s*(.+)$/);
-    if (m) derived.push({ category: m[1].trim(), skills: m[2].split(/\s*,\s*/).filter(Boolean) });
+  const explicit = resume.skillGroups ?? [];
+  if (explicit.length > 0) {
+    const totalSkills = explicit.reduce((n, g) => n + g.skills.length, 0);
+    if (totalSkills > explicit.length) return explicit;
   }
+  const flat = resume.skills ?? [];
+  const catRe = /^([A-Za-z][^:]{2,39}):\s*(.+)$/;
+  const derived: { category: string; skills: string[] }[] = [];
+  let cur: { category: string; skills: string[] } | null = null;
+  const preItems: string[] = [];
+  for (const item of flat) {
+    const m = item.match(catRe);
+    if (m) {
+      if (cur) derived.push(cur);
+      cur = { category: m[1].trim(), skills: m[2].split(/\s*,\s*/).filter(Boolean) };
+    } else if (cur) {
+      cur.skills.push(item.trim());
+    } else {
+      preItems.push(item.trim());
+    }
+  }
+  if (cur) derived.push(cur);
+  if (derived.length === 0) return [];
+  const covered = new Set(derived.flatMap(g => g.skills.map(s => s.toLowerCase())));
+  const uncovered = preItems.filter(s => !covered.has(s.toLowerCase()));
+  if (uncovered.length > 0) derived.push({ category: "Additional Skills", skills: uncovered });
   return derived;
 }
 
@@ -3166,7 +3185,7 @@ function buildPlainTextResume(a: ResumeData): string {
   a = sanitizeResumeForExport(a);
   const lines: string[] = [];
   lines.push(a.contact?.name ?? "");
-  lines.push([a.contact?.email, a.contact?.location, a.contact?.linkedin].filter(Boolean).join(" | "));
+  lines.push([a.contact?.phone, a.contact?.email, a.contact?.location, a.contact?.linkedin].filter(Boolean).join(" | "));
   lines.push("");
   lines.push("SUMMARY");
   lines.push(a.summary ?? "");

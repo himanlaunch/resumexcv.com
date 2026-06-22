@@ -180,6 +180,7 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
   return {
     contact: {
       name: sanitizeResumeText(resume.contact?.name),
+      phone: sanitizeResumeText(resume.contact?.phone),
       email: sanitizeResumeText(resume.contact?.email),
       location: sanitizeResumeText(resume.contact?.location),
       linkedin: sanitizeResumeText(resume.contact?.linkedin),
