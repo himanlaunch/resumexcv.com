@@ -2024,17 +2024,18 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
 
   useEffect(() => {
     const node = loadMoreSentinelRef.current;
-    if (!node || status !== "done" || !hasMore || loadingMore) return;
+    // Only auto-load when the user is already on the last page of loaded results
+    if (!node || status !== "done" || !hasMore || loadingMore || currentPage < totalPages) return;
 
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         void handleLoadMore();
       }
-    }, { rootMargin: "600px 0px 600px 0px" });
+    }, { rootMargin: "200px 0px 0px 0px" });
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [status, hasMore, loadingMore, handleLoadMore, currentPage, visibleJobs.length]);
+  }, [status, hasMore, loadingMore, handleLoadMore, currentPage, totalPages, visibleJobs.length]);
 
   const toggle = (id: string) => setSelected(prev => {
     const s = new Set(prev);
@@ -2277,12 +2278,12 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                   <button
                     type="button"
                     onClick={() => void handleNextPage()}
-                    disabled={(currentPage >= totalPages && !hasMore) || loadingMore}
+                    disabled={(currentPage >= totalPages && !hasMore) || (currentPage >= totalPages && loadingMore)}
                     className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
-                    style={{ backgroundColor: loadingMore ? "#F0F0F0" : "#fff", border: "1.5px solid #D0D5DD", color: (currentPage >= totalPages && !hasMore) || loadingMore ? "#aaa" : "#0A0A0A" }}
+                    style={{ backgroundColor: (currentPage >= totalPages && loadingMore) ? "#F0F0F0" : "#fff", border: "1.5px solid #D0D5DD", color: (currentPage >= totalPages && !hasMore) || (currentPage >= totalPages && loadingMore) ? "#aaa" : "#0A0A0A" }}
                     aria-label="Next jobs page"
                   >
-                    {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                    {(currentPage >= totalPages && loadingMore) ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
                   </button>
                 </div>
               )}
@@ -2457,11 +2458,11 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
               <button
                 type="button"
                 onClick={() => void handleNextPage()}
-                disabled={(currentPage >= totalPages && !hasMore) || loadingMore}
+                disabled={(currentPage >= totalPages && !hasMore) || (currentPage >= totalPages && loadingMore)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all"
-                style={{ backgroundColor: loadingMore ? "#F0F0F0" : "#fff", border: "1.5px solid #D0D5DD", color: (currentPage >= totalPages && !hasMore) || loadingMore ? "#aaa" : "#0A0A0A" }}
+                style={{ backgroundColor: (currentPage >= totalPages && loadingMore) ? "#F0F0F0" : "#fff", border: "1.5px solid #D0D5DD", color: (currentPage >= totalPages && !hasMore) || (currentPage >= totalPages && loadingMore) ? "#aaa" : "#0A0A0A" }}
               >
-                {loadingMore ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading</> : <>Next <ChevronRight className="w-3.5 h-3.5" /></>}
+                {(currentPage >= totalPages && loadingMore) ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading</> : <>Next <ChevronRight className="w-3.5 h-3.5" /></>}
               </button>
             </div>
           </div>
