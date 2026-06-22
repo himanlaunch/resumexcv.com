@@ -32,6 +32,7 @@ export interface ResumeData {
   contact?: { name?: string; phone?: string; email?: string; location?: string; linkedin?: string; github?: string };
   summary?: string;
   skills?: string[];
+  skillGroups?: { category: string; skills: string[] }[];
   experience?: { title: string; company: string; location?: string; period: string; bullets?: string[] }[];
   education?: { degree: string; school: string; location?: string; year: string; notes?: string }[];
   certifications?: string[];
