@@ -1472,8 +1472,8 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
             </div>
 
             <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.75fr)] gap-5">
-              <div className="card-base rounded-2xl overflow-hidden">
-                <div className="px-4 md:px-5 py-4 flex flex-wrap items-center gap-2" style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #F0F0F0" }}>
+              <div className="card-base rounded-2xl">
+                <div className="px-4 md:px-5 py-4 flex flex-wrap items-center gap-2 rounded-t-2xl overflow-hidden" style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #F0F0F0" }}>
                   <Sparkles className="w-4 h-4" style={{ color: "#00c447" }} />
                   <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Recommended job titles</h3>
                   <span className="text-xs md:ml-1" style={{ color: "#888" }}>Inferred from your resume. Select targets.</span>
@@ -1539,7 +1539,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                       {roleApiLoading && <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />}
                       </div>
                       {roleSuggestionsOpen && (roleSuggestions.length > 0 || customTitleInput.trim()) && (
-                        <div className="absolute z-20 w-full mt-1 rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}>
+                        <div className="absolute z-50 w-full mt-1 rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}>
                           {roleSuggestions.map(title => (
                             <button
                               key={title}
