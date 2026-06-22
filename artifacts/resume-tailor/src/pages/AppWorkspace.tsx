@@ -808,6 +808,9 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
   );
   const [certifications, setCertifications] = useState<string[]>(parsed.certifications ?? []);
   const [achievements, setAchievements] = useState<string[]>(parsed.achievements ?? []);
+  const [projects, setProjects] = useState(
+    (parsed.projects ?? []).map(p => ({ ...p, bullets: [...(p.bullets ?? [])] }))
+  );
 
   const handleConfirm = () => {
     const skills = skillsText.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
@@ -819,6 +822,7 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
       education,
       certifications: certifications.map(c => c.trim()).filter(Boolean),
       achievements: achievements.map(a => a.trim()).filter(Boolean),
+      projects,
     });
   };
 
@@ -907,16 +911,21 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
                       Remove
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
-                    {(["title", "company", "period"] as const).map(f => (
-                      <div key={f}>
-                        <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{f}</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                    {([
+                      { key: "title", placeholder: "e.g. Senior Software Engineer" },
+                      { key: "company", placeholder: "e.g. Google" },
+                      { key: "period", placeholder: "e.g. Jan 2022 – Present" },
+                      { key: "location", placeholder: "e.g. Remote, USA" },
+                    ] as const).map(({ key, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{key}</label>
                         <input
                           className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
                           style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
-                          value={exp[f] ?? ""}
-                          placeholder={f === "period" ? "e.g. Jan 2022 – Present" : ""}
-                          onChange={e => setExperience(prev => prev.map((x, j) => j === i ? { ...x, [f]: e.target.value } : x))}
+                          value={(exp as any)[key] ?? ""}
+                          placeholder={placeholder}
+                          onChange={e => setExperience(prev => prev.map((x, j) => j === i ? { ...x, [key]: e.target.value } : x))}
                         />
                       </div>
                     ))}
@@ -995,7 +1004,7 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
                     {([
                       { key: "degree", placeholder: "e.g. B.S. Computer Science" },
                       { key: "school", placeholder: "e.g. Stanford University" },
-                      { key: "year", placeholder: "e.g. 2020" },
+                      { key: "year", placeholder: "e.g. 2020 or 2018–2022" },
                       { key: "location", placeholder: "e.g. Stanford, CA" },
                     ] as const).map(({ key, placeholder }) => (
                       <div key={key}>
@@ -1009,6 +1018,16 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
                         />
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium mb-1" style={{ color: "#666" }}>Notes (GPA, honours, etc.)</label>
+                    <input
+                      className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
+                      style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
+                      value={edu.notes ?? ""}
+                      placeholder="e.g. GPA: 3.8 · Distinction"
+                      onChange={e => setEducation(prev => prev.map((x, j) => j === i ? { ...x, notes: e.target.value } : x))}
+                    />
                   </div>
                 </div>
               ))}
@@ -1047,6 +1066,89 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
                     className="px-2.5 rounded-lg text-sm flex-shrink-0"
                     style={{ color: "#EF4444", backgroundColor: "#FEF2F2", border: "1px solid #FECACA" }}
                   >×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Projects */}
+          <div className="card-base p-5 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm" style={{ color: "#0A0A0A" }}>
+                Projects {projects.length > 0 ? `(${projects.length})` : ""}
+              </h3>
+              <button
+                onClick={() => setProjects(prev => [...prev, { name: "", period: "", bullets: [] }])}
+                className="text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1"
+                style={{ backgroundColor: "#F0FDF4", color: "#00796b", border: "1px solid #A7F3D0" }}
+              >
+                <Plus className="w-3 h-3" /> Add project
+              </button>
+            </div>
+            {projects.length === 0 && (
+              <p className="text-xs py-3 text-center" style={{ color: "#AAA" }}>No projects parsed — add one above</p>
+            )}
+            <div className="space-y-4">
+              {projects.map((proj, i) => (
+                <div key={i} className="p-3 rounded-xl" style={{ backgroundColor: "#F8F9FA", border: "1px solid #EBEBEB" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium" style={{ color: "#888" }}>Project {i + 1}</span>
+                    <button
+                      onClick={() => setProjects(prev => prev.filter((_, j) => j !== i))}
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{ color: "#EF4444", backgroundColor: "#FEF2F2" }}
+                    >Remove</button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: "#666" }}>Name / URL</label>
+                      <input
+                        className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
+                        style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
+                        value={proj.name}
+                        placeholder="e.g. thinkinglegends.com"
+                        onChange={e => setProjects(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: "#666" }}>Period</label>
+                      <input
+                        className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
+                        style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
+                        value={proj.period ?? ""}
+                        placeholder="e.g. 2024 – Present"
+                        onChange={e => setProjects(prev => prev.map((x, j) => j === i ? { ...x, period: e.target.value } : x))}
+                      />
+                    </div>
+                  </div>
+                  <ul className="space-y-1">
+                    {(proj.bullets ?? []).map((b, bi) => (
+                      <li key={bi} className="flex gap-1">
+                        <input
+                          className="flex-1 px-2 py-1 rounded text-xs outline-none"
+                          style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#333" }}
+                          value={b}
+                          onChange={e => setProjects(prev => prev.map((x, j) => j === i
+                            ? { ...x, bullets: x.bullets!.map((bx, bj) => bj === bi ? e.target.value : bx) }
+                            : x
+                          ))}
+                        />
+                        <button
+                          onClick={() => setProjects(prev => prev.map((x, j) => j === i
+                            ? { ...x, bullets: x.bullets!.filter((_, bj) => bj !== bi) }
+                            : x
+                          ))}
+                          className="px-1.5 rounded text-xs flex-shrink-0"
+                          style={{ color: "#EF4444", backgroundColor: "#FEF2F2" }}
+                        >×</button>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() => setProjects(prev => prev.map((x, j) => j === i ? { ...x, bullets: [...(x.bullets ?? []), ""] } : x))}
+                    className="mt-1.5 text-xs font-medium"
+                    style={{ color: "#00796b" }}
+                  >+ Add bullet</button>
                 </div>
               ))}
             </div>
@@ -3064,7 +3166,18 @@ function buildPlainTextResume(a: ResumeData): string {
     lines.push("");
   }
   lines.push("EDUCATION");
-  for (const e of a.education ?? []) lines.push(`${e.degree}, ${e.school}, ${e.year}`);
+  for (const e of a.education ?? []) {
+    lines.push(`${e.degree}, ${e.school}, ${e.year}`);
+    if (e.notes) lines.push(`  • ${e.notes}`);
+  }
+  if (a.projects && a.projects.length > 0) {
+    lines.push("");
+    lines.push("PROJECTS");
+    for (const p of a.projects) {
+      lines.push(`${p.name}${p.period ? ` (${p.period})` : ""}`);
+      for (const b of p.bullets ?? []) lines.push(`  • ${b}`);
+    }
+  }
   lines.push("");
   lines.push("CERTIFICATIONS");
   for (const c of a.certifications ?? []) lines.push(`• ${c}`);
@@ -3085,6 +3198,7 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
     education: (base.education ?? []).map(e => ({ ...e })),
     certifications: [...(base.certifications ?? [])],
     achievements: [...(base.achievements ?? [])],
+    projects: (base.projects ?? []).map(p => ({ ...p, bullets: [...(p.bullets ?? [])] })),
   };
 
   for (const row of rows) {
@@ -3263,6 +3377,26 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
                 <em style={{ fontSize: 12.5, color: "#444" }}>{e.degree}</em>
                 {e.location && <span style={{ fontSize: 11.5, color: "#888" }}>{e.location}</span>}
               </div>
+              {e.notes && <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>• {e.notes}</div>}
+            </div>
+          ))}
+        </>
+      )}
+
+      {(resume.projects ?? []).length > 0 && (
+        <>
+          <div style={sectionStyle}>Projects</div>
+          {resume.projects!.map((proj, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <strong style={{ fontSize: 13, color: "#111" }}>{proj.name}</strong>
+                {proj.period && <span style={{ fontSize: 12, color: "#666" }}>{proj.period}</span>}
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {(proj.bullets ?? []).map((b, bi) => (
+                  <li key={bi} style={{ fontSize: 13, color: "#222", marginBottom: 3 }}>{b}</li>
+                ))}
+              </ul>
             </div>
           ))}
         </>
@@ -3450,6 +3584,45 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
         }
         y += 4.8;
       }
+      if (edu.notes) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9.5);
+        setColor(80, 80, 80);
+        pdf.text(`• ${edu.notes}`, mL + 3, y);
+        y += 4.5;
+      }
+      y += 2;
+    }
+  }
+
+  // ── Projects ──
+  if ((resume.projects ?? []).length > 0) {
+    sectionHead("Projects");
+    for (const proj of resume.projects!) {
+      bp(14);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10.5);
+      setColor(10, 10, 10);
+      pdf.text(proj.name, mL, y);
+      if (proj.period) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9.5);
+        setColor(90, 90, 90);
+        pdf.text(proj.period, pageW - mR, y, { align: "right" });
+      }
+      y += 4.8;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      setColor(20, 20, 20);
+      for (const bullet of proj.bullets ?? []) {
+        const lines = pdf.splitTextToSize(bullet, textW - 5);
+        for (let i = 0; i < lines.length; i++) {
+          bp(5);
+          if (i === 0) { pdf.text("•", mL + 0.5, y); pdf.text(lines[i], mL + 5, y); }
+          else { pdf.text(lines[i], mL + 5, y); }
+          y += 4.8;
+        }
+      }
       y += 2;
     }
   }
@@ -3614,7 +3787,36 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
             ...(edu.location ? [new TextRun({ text: "\t" }), new TextRun({ text: edu.location, size: 20, font: "Calibri", color: "555555" })] : []),
           ],
           tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
-          spacing: { after: 60 },
+          spacing: { after: edu.notes ? 20 : 60 },
+        }));
+      }
+      if (edu.notes) {
+        children.push(new Paragraph({
+          children: [new TextRun({ text: edu.notes, size: 20, font: "Calibri", color: "555555" })],
+          bullet: { level: 0 },
+          spacing: { after: 50 },
+        }));
+      }
+    }
+  }
+
+  // ── Projects ──
+  if ((resume.projects ?? []).length > 0) {
+    children.push(sectionHeading("Projects"));
+    for (const proj of resume.projects!) {
+      children.push(new Paragraph({
+        children: [
+          new TextRun({ text: proj.name, bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
+          ...(proj.period ? [new TextRun({ text: "\t" }), new TextRun({ text: proj.period, size: 20, font: "Calibri", color: "555555" })] : []),
+        ],
+        tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
+        spacing: { before: 60, after: 30 },
+      }));
+      for (const bullet of proj.bullets ?? []) {
+        children.push(new Paragraph({
+          children: [new TextRun({ text: bullet, size: 22, font: "Calibri", color: "111111" })],
+          bullet: { level: 0 },
+          spacing: { after: 20 },
         }));
       }
     }
@@ -3806,6 +4008,26 @@ function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; ta
                   <em style={{ fontSize: 11.5, color: "#444" }}>{e.degree}</em>
                   {e.location && <span style={{ fontSize: 11, color: "#888" }}>{e.location}</span>}
                 </div>
+                {e.notes && <div style={{ fontSize: 11, color: "#666", marginTop: 1 }}>• {e.notes}</div>}
+              </div>
+            ))}
+          </>
+        )}
+
+        {(res.projects ?? []).length > 0 && (
+          <>
+            {sectionHdr("Projects")}
+            {res.projects!.map((proj, i) => (
+              <div key={i} style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <strong style={{ fontSize: 12.5, color: "#111" }}>{proj.name}</strong>
+                  {proj.period && <span style={{ fontSize: 11, color: "#666" }}>{proj.period}</span>}
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                  {(proj.bullets ?? []).map((b, bi) => (
+                    <li key={bi} style={{ fontSize: 12, color: "#222", marginBottom: 2 }}>{b}</li>
+                  ))}
+                </ul>
               </div>
             ))}
           </>

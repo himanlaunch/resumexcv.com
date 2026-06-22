@@ -172,6 +172,10 @@ export function sanitizeDiffChange(change: DiffChange): DiffChange {
   };
 }
 
+function stripBulletPrefix(text: string): string {
+  return text.replace(/^[•\-–—]\s+/, "").trim();
+}
+
 export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
   return {
     contact: {
@@ -186,8 +190,10 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
     experience: (resume.experience ?? []).map((exp) => ({
       title: sanitizeResumeText(exp.title),
       company: sanitizeResumeText(exp.company),
+      location: sanitizeResumeText(exp.location),
       period: sanitizeResumeText(exp.period),
       bullets: (exp.bullets ?? [])
+        .map(stripBulletPrefix)
         .map(sanitizeResumeText)
         .filter((bullet) => !isLocationOnlyBullet(bullet))
         .filter(Boolean),
@@ -197,6 +203,7 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
       school: sanitizeResumeText(edu.school),
       year: sanitizeResumeText(edu.year),
       location: sanitizeResumeText(edu.location),
+      notes: sanitizeResumeText(edu.notes),
     })),
     achievements: (resume.achievements ?? []).map(sanitizeResumeText).filter(Boolean),
     certifications: (() => {
@@ -216,5 +223,10 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
           return true;
         });
     })(),
+    projects: (resume.projects ?? []).map((proj) => ({
+      name: sanitizeResumeText(proj.name),
+      period: sanitizeResumeText(proj.period),
+      bullets: (proj.bullets ?? []).map(stripBulletPrefix).map(sanitizeResumeText).filter(Boolean),
+    })).filter(p => p.name),
   };
 }

@@ -33,9 +33,10 @@ export interface ResumeData {
   summary?: string;
   skills?: string[];
   experience?: { title: string; company: string; location?: string; period: string; bullets?: string[] }[];
-  education?: { degree: string; school: string; location?: string; year: string }[];
+  education?: { degree: string; school: string; location?: string; year: string; notes?: string }[];
   certifications?: string[];
   achievements?: string[];
+  projects?: { name: string; period?: string; bullets?: string[] }[];
 }
 
 export interface JobData {

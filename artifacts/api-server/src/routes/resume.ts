@@ -234,6 +234,11 @@ function sanitizeTailoringResult(result: TailoringResult): TailoringResult {
   };
 }
 
+// Strip leading bullet/dash markers that PDF extractors often inject into bullet text
+function stripBulletPrefix(text: string): string {
+  return text.replace(/^[•\-–—]\s+/, "").trim();
+}
+
 function sanitizeResumeRecord(resume: ResumeRecord): ResumeRecord {
   return {
     contact: {
@@ -254,14 +259,24 @@ function sanitizeResumeRecord(resume: ResumeRecord): ResumeRecord {
       company: sanitizeResumeText(exp.company),
       location: sanitizeResumeText(exp.location),
       period: sanitizeResumeText(exp.period),
-      bullets: (exp.bullets ?? []).map(sanitizeResumeText).filter((bullet) => !isLocationOnlyBullet(bullet)).filter(Boolean),
+      bullets: (exp.bullets ?? [])
+        .map(stripBulletPrefix)
+        .map(sanitizeResumeText)
+        .filter((bullet) => !isLocationOnlyBullet(bullet))
+        .filter(Boolean),
     })),
     education: (resume.education ?? []).map((edu) => ({
       degree: sanitizeResumeText(edu.degree),
       school: sanitizeResumeText(edu.school),
       location: sanitizeResumeText(edu.location),
       year: sanitizeResumeText(edu.year),
+      notes: sanitizeResumeText(edu.notes),
     })),
+    projects: (resume.projects ?? []).map((proj) => ({
+      name: sanitizeResumeText(proj.name),
+      period: sanitizeResumeText(proj.period),
+      bullets: (proj.bullets ?? []).map(stripBulletPrefix).map(sanitizeResumeText).filter(Boolean),
+    })).filter(p => p.name),
     ...classifyAndSanitize(resume),
   };
 }
@@ -467,9 +482,10 @@ Preserve the candidate's full career history and factual detail. Do not optimize
     "summary": "...",
     "skills": ["..."],
     "experience": [{ "title": "...", "company": "...", "location": "...", "period": "...", "bullets": ["..."] }],
-    "education": [{ "degree": "...", "school": "...", "location": "...", "year": "..." }],
+    "education": [{ "degree": "...", "school": "...", "location": "...", "year": "...", "notes": "..." }],
     "certifications": ["..."],
-    "achievements": ["..."]
+    "achievements": ["..."],
+    "projects": [{ "name": "...", "period": "...", "bullets": ["..."] }]
   },
   "recommendations": {
     "titles": [{ "title": "...", "reason": "..." }],
@@ -481,17 +497,20 @@ Rules:
 - "titles": suggest 4-6 job titles this candidate should search for based on their actual experience and seniority. Brief reason for each.
 - "locations": include their current location (icon "📍") and "Remote (US)" (icon "🌐"). Add 1-2 relevant tech hubs if appropriate.
 - Use empty strings or empty arrays for missing fields — never null or undefined.
-- Preserve every work experience role that appears in the resume text, including older roles, internships, projects listed as experience, and contract roles.
+- Preserve every work experience role that appears in the resume text, including older roles, internships, and contract roles.
 - Preserve all meaningful bullet details, metrics, technologies, scope, domains, tools, and outcomes from each role.
 - Do not truncate bullets or collapse multiple roles together.
 - If the resume does not have an explicit summary, write a concise professional summary grounded only in the resume text.
 - "contact.phone": extract the candidate's phone number exactly as written.
 - "experience[].location": extract the city/country where each role was based (e.g. "Dublin, Ireland", "Remote, USA"). Use empty string if not stated.
 - "education[].location": extract the city/country of the school (e.g. "St. Louis, MO"). Use empty string if not stated.
+- "education[].notes": capture any sub-details about each education entry such as GPA, grade, distinction, honours, or specific achievements (e.g. "GPA: 3.8", "Distinction"). Use empty string if not stated.
+- "projects": capture any Projects, Side Projects, or Personal Projects section. Each entry has a name (project name or URL), optional period, and bullets describing it. Use empty array if no projects section exists.
 - "achievements": capture items from any Achievements, Awards, Honours, or Scholarships section — scholarships, national/state rankings, merit awards, medals, promotions. Do NOT put these in certifications.
 - "certifications": ONLY professional certifications, technical credentials, and training program completions (e.g. "AWS Certified", "Microsoft SQL Server Training", "Bloomberg Market Concepts"). NOT scholarships, rankings, or awards.
 - DEDUPLICATION: If the same certification or achievement appears twice (e.g. once with and once without a year/parenthetical), include it ONLY ONCE — keep the more detailed version.
 - Never list the same item in both certifications and achievements.
+- IMPORTANT: Do NOT include leading dashes or bullet characters in bullet text — write bullet content as plain text only.
 
 RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
@@ -1024,9 +1043,10 @@ interface ResumeRecord {
   summary?: string;
   skills?: string[];
   experience?: { title: string; company: string; location?: string; period: string; bullets?: string[] }[];
-  education?: { degree: string; school: string; location?: string; year: string }[];
+  education?: { degree: string; school: string; location?: string; year: string; notes?: string }[];
   certifications?: string[];
   achievements?: string[];
+  projects?: { name: string; period?: string; bullets?: string[] }[];
 }
 
 interface JobRecord {
