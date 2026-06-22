@@ -254,6 +254,16 @@ function sanitizeResumeRecord(resume: ResumeRecord): ResumeRecord {
       .flatMap((skill) => sanitizeResumeSkillText(skill).split(/\s*,\s*/))
       .map(normalizeResumeText)
       .filter(Boolean),
+    skillGroups: (resume.skillGroups ?? [])
+      .filter(g => g.category && Array.isArray(g.skills))
+      .map(g => ({
+        category: sanitizeResumeText(g.category),
+        skills: g.skills
+          .flatMap(s => sanitizeResumeSkillText(s).split(/\s*,\s*/))
+          .map(normalizeResumeText)
+          .filter(Boolean),
+      }))
+      .filter(g => g.category && g.skills.length > 0),
     experience: (resume.experience ?? []).map((exp) => ({
       title: sanitizeResumeText(exp.title),
       company: sanitizeResumeText(exp.company),
@@ -481,6 +491,7 @@ Preserve the candidate's full career history and factual detail. Do not optimize
     "contact": { "name": "...", "phone": "...", "email": "...", "location": "...", "linkedin": "...", "github": "..." },
     "summary": "...",
     "skills": ["..."],
+    "skillGroups": [{ "category": "...", "skills": ["..."] }],
     "experience": [{ "title": "...", "company": "...", "location": "...", "period": "...", "bullets": ["..."] }],
     "education": [{ "degree": "...", "school": "...", "location": "...", "year": "...", "notes": "..." }],
     "certifications": ["..."],
@@ -511,6 +522,7 @@ Rules:
 - DEDUPLICATION: If the same certification or achievement appears twice (e.g. once with and once without a year/parenthetical), include it ONLY ONCE — keep the more detailed version.
 - Never list the same item in both certifications and achievements.
 - IMPORTANT: Do NOT include leading dashes or bullet characters in bullet text — write bullet content as plain text only.
+- "skillGroups": group ALL skills from the "skills" array into 3–7 meaningful categories (e.g. "Programming Languages", "Data & Analytics", "Cloud & Infrastructure", "Marketing Platforms", "BI & Visualization", "Project Management", "Soft Skills"). Every skill in "skills" must appear in exactly one group. If skills are already grouped in the resume text, preserve those groups.
 
 RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
@@ -1042,6 +1054,7 @@ interface ResumeRecord {
   contact?: { name?: string; phone?: string; email?: string; location?: string; linkedin?: string; github?: string };
   summary?: string;
   skills?: string[];
+  skillGroups?: { category: string; skills: string[] }[];
   experience?: { title: string; company: string; location?: string; period: string; bullets?: string[] }[];
   education?: { degree: string; school: string; location?: string; year: string; notes?: string }[];
   certifications?: string[];

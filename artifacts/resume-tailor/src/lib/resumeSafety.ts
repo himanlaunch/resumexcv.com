@@ -187,6 +187,13 @@ export function sanitizeResumeForExport(resume: ResumeData): ResumeData {
     },
     summary: sanitizeResumeText(resume.summary),
     skills: (resume.skills ?? []).flatMap(sanitizeResumeSkillText),
+    skillGroups: (resume.skillGroups ?? [])
+      .filter(g => g.category && Array.isArray(g.skills))
+      .map(g => ({
+        category: sanitizeResumeText(g.category),
+        skills: g.skills.flatMap(sanitizeResumeSkillText).filter(Boolean),
+      }))
+      .filter(g => g.category && g.skills.length > 0),
     experience: (resume.experience ?? []).map((exp) => ({
       title: sanitizeResumeText(exp.title),
       company: sanitizeResumeText(exp.company),

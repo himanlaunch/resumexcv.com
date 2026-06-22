@@ -3159,7 +3159,11 @@ function buildPlainTextResume(a: ResumeData): string {
   lines.push(a.summary ?? "");
   lines.push("");
   lines.push("SKILLS");
-  lines.push(a.skills?.join(", ") ?? "");
+  if ((a.skillGroups ?? []).length > 0) {
+    for (const grp of a.skillGroups!) lines.push(`${grp.category}: ${grp.skills.join(", ")}`);
+  } else {
+    lines.push(a.skills?.join(", ") ?? "");
+  }
   lines.push("");
   lines.push("EXPERIENCE");
   for (const e of a.experience ?? []) {
@@ -3336,10 +3340,17 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
         </>
       )}
 
-      {(resume.skills ?? []).length > 0 && (
+      {((resume.skillGroups ?? []).length > 0 || (resume.skills ?? []).length > 0) && (
         <>
           <div style={sectionStyle}>Skills</div>
-          <p style={{ fontSize: 12.5, color: "#333", margin: 0 }}>{resume.skills!.join(" · ")}</p>
+          {(resume.skillGroups ?? []).length > 0
+            ? (resume.skillGroups!.map((grp, i) => (
+                <p key={i} style={{ fontSize: 12.5, color: "#333", margin: "0 0 3px 0" }}>
+                  <strong style={{ color: "#111" }}>{grp.category}:</strong>{" "}{grp.skills.join(", ")}
+                </p>
+              )))
+            : <p style={{ fontSize: 12.5, color: "#333", margin: 0 }}>{resume.skills!.join(" · ")}</p>
+          }
         </>
       )}
 
@@ -3425,6 +3436,15 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
   );
 }
 
+// Replace Unicode chars that jsPDF's built-in Helvetica (Latin-1) can't encode
+function pdfSafeText(text: string): string {
+  return text
+    .replace(/→/g, "->").replace(/←/g, "<-").replace(/↑/g, "^").replace(/↓/g, "v")
+    .replace(/[""]/g, '"').replace(/['']/g, "'")
+    .replace(/…/g, "...").replace(/•/g, "*")
+    .replace(/[^\x00-\xFF]/g, "");
+}
+
 async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   try {
   const { jsPDF } = await import("jspdf");
@@ -3448,27 +3468,40 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   const setColor = (r: number, g: number, b: number) => pdf.setTextColor(r, g, b);
 
   // ── Name ──
-  const personName = resume.contact?.name ?? "";
+  const personName = pdfSafeText(resume.contact?.name ?? "");
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(20);
   setColor(10, 10, 10);
   pdf.text(personName, pageW / 2, y, { align: "center" });
   y += 7;
 
-  // ── Contact line ──
+  // ── Contact line (auto-wraps if too wide) ──
   const contactParts = [
     resume.contact?.phone,
     resume.contact?.email,
     resume.contact?.location,
     resume.contact?.linkedin,
     resume.contact?.github,
-  ].filter(Boolean) as string[];
+  ].filter(Boolean).map(pdfSafeText);
   if (contactParts.length) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(9);
     setColor(70, 70, 70);
-    pdf.text(contactParts.join("  |  "), pageW / 2, y, { align: "center" });
-    y += 7;
+    const contactLine = contactParts.join("  |  ");
+    const lineW = pdf.getTextWidth(contactLine);
+    if (lineW <= textW) {
+      pdf.text(contactLine, pageW / 2, y, { align: "center" });
+      y += 5.5;
+    } else {
+      // Split into two balanced lines
+      const mid = Math.ceil(contactParts.length / 2);
+      const line1 = contactParts.slice(0, mid).join("  |  ");
+      const line2 = contactParts.slice(mid).join("  |  ");
+      pdf.text(line1, pageW / 2, y, { align: "center" });
+      y += 4.5;
+      pdf.text(line2, pageW / 2, y, { align: "center" });
+      y += 5.5;
+    }
   }
 
   const sectionHead = (title: string) => {
@@ -3491,20 +3524,49 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(10);
     setColor(20, 20, 20);
-    const wrapped = pdf.splitTextToSize(resume.summary, textW);
+    const wrapped = pdf.splitTextToSize(pdfSafeText(resume.summary), textW);
     for (const line of wrapped) { bp(5); pdf.text(line, mL, y); y += 4.8; }
     y += 1;
   }
 
   // ── Skills ──
-  if ((resume.skills ?? []).length > 0) {
+  const hasSkillGroups = (resume.skillGroups ?? []).length > 0;
+  if (hasSkillGroups || (resume.skills ?? []).length > 0) {
     sectionHead("Skills");
-    pdf.setFont("helvetica", "normal");
     pdf.setFontSize(10);
     setColor(20, 20, 20);
-    const skillLine = resume.skills!.join(", ");
-    const wrapped = pdf.splitTextToSize(skillLine, textW);
-    for (const line of wrapped) { bp(5); pdf.text(line, mL, y); y += 4.8; }
+    if (hasSkillGroups) {
+      for (const grp of resume.skillGroups!) {
+        bp(10);
+        const label = pdfSafeText(grp.category) + ": ";
+        const skillsText = pdfSafeText(grp.skills.join(", "));
+        // Print category label in bold then skills inline
+        pdf.setFont("helvetica", "bold");
+        const labelW = pdf.getTextWidth(label);
+        pdf.text(label, mL, y);
+        pdf.setFont("helvetica", "normal");
+        const remaining = textW - labelW;
+        if (pdf.getTextWidth(skillsText) <= remaining) {
+          pdf.text(skillsText, mL + labelW, y);
+          y += 5;
+        } else {
+          // Wrap skills onto following lines
+          const wrapped = pdf.splitTextToSize(skillsText, textW - labelW);
+          pdf.text(wrapped[0], mL + labelW, y);
+          y += 5;
+          for (let i = 1; i < wrapped.length; i++) {
+            bp(5);
+            pdf.text(wrapped[i], mL + labelW, y);
+            y += 4.8;
+          }
+        }
+      }
+    } else {
+      pdf.setFont("helvetica", "normal");
+      const skillLine = pdfSafeText(resume.skills!.join(", "));
+      const wrapped = pdf.splitTextToSize(skillLine, textW);
+      for (const line of wrapped) { bp(5); pdf.text(line, mL, y); y += 4.8; }
+    }
     y += 1;
   }
 
@@ -3517,23 +3579,23 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10.5);
       setColor(10, 10, 10);
-      pdf.text(exp.company, mL, y);
+      pdf.text(pdfSafeText(exp.company), mL, y);
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(9.5);
       setColor(90, 90, 90);
-      pdf.text(exp.period ?? "", pageW - mR, y, { align: "right" });
+      pdf.text(pdfSafeText(exp.period ?? ""), pageW - mR, y, { align: "right" });
       y += 4.8;
 
       // Title (italic) on left, location on right
       pdf.setFont("helvetica", "italic");
       pdf.setFontSize(10);
       setColor(55, 55, 55);
-      pdf.text(exp.title, mL, y);
+      pdf.text(pdfSafeText(exp.title), mL, y);
       if (exp.location) {
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(9.5);
         setColor(90, 90, 90);
-        pdf.text(exp.location, pageW - mR, y, { align: "right" });
+        pdf.text(pdfSafeText(exp.location), pageW - mR, y, { align: "right" });
       }
       y += 4.5;
 
@@ -3541,7 +3603,7 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
       pdf.setFontSize(10);
       setColor(20, 20, 20);
       for (const bullet of exp.bullets ?? []) {
-        const lines = pdf.splitTextToSize(bullet, textW - 5);
+        const lines = pdf.splitTextToSize(pdfSafeText(bullet), textW - 5);
         for (let i = 0; i < lines.length; i++) {
           bp(5);
           if (i === 0) {
@@ -3724,13 +3786,26 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
     }));
   }
 
-  // ── Skills ── (comma-separated — ATS parses this cleanly)
-  if ((resume.skills ?? []).length > 0) {
+  // ── Skills ── grouped if available, flat fallback
+  const hasDocxGroups = (resume.skillGroups ?? []).length > 0;
+  if (hasDocxGroups || (resume.skills ?? []).length > 0) {
     children.push(sectionHeading("Skills"));
-    children.push(new Paragraph({
-      children: [new TextRun({ text: resume.skills!.join(", "), size: 22, font: "Calibri", color: "111111" })],
-      spacing: { after: 80 },
-    }));
+    if (hasDocxGroups) {
+      for (const grp of resume.skillGroups!) {
+        children.push(new Paragraph({
+          children: [
+            new TextRun({ text: `${grp.category}: `, size: 22, font: "Calibri", bold: true, color: "111111" }),
+            new TextRun({ text: grp.skills.join(", "), size: 22, font: "Calibri", color: "111111" }),
+          ],
+          spacing: { after: 60 },
+        }));
+      }
+    } else {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: resume.skills!.join(", "), size: 22, font: "Calibri", color: "111111" })],
+        spacing: { after: 80 },
+      }));
+    }
   }
 
   // ── Experience ──
