@@ -803,10 +803,23 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
   const [experience, setExperience] = useState(
     (parsed.experience ?? []).map(e => ({ ...e, bullets: [...(e.bullets ?? [])] }))
   );
+  const [education, setEducation] = useState(
+    (parsed.education ?? []).map(e => ({ ...e }))
+  );
+  const [certifications, setCertifications] = useState<string[]>(parsed.certifications ?? []);
+  const [achievements, setAchievements] = useState<string[]>(parsed.achievements ?? []);
 
   const handleConfirm = () => {
     const skills = skillsText.split(/[,;]+/).map(s => s.trim()).filter(Boolean);
-    onConfirm({ contact, summary: summary.trim(), skills, experience, education: parsed.education, certifications: parsed.certifications, achievements: parsed.achievements ?? [] });
+    onConfirm({
+      contact,
+      summary: summary.trim(),
+      skills,
+      experience,
+      education,
+      certifications: certifications.map(c => c.trim()).filter(Boolean),
+      achievements: achievements.map(a => a.trim()).filter(Boolean),
+    });
   };
 
   return (
@@ -816,7 +829,7 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
           <div className="chip-mint inline-flex mb-3">Review Parsed Resume</div>
           <h1 className="font-heading font-bold text-2xl mb-1" style={{ color: "#0A0A0A" }}>Confirm your details</h1>
           <p className="text-sm" style={{ color: "#666" }}>
-            {fileName ? `Parsed from "${fileName}". ` : ""}Fix anything that looks off before continuing.
+            {fileName ? `Parsed from "${fileName}". ` : ""}Fix anything that looks off, or add missing sections below.
           </p>
         </div>
 
@@ -864,51 +877,217 @@ function ParsedResumeReview({ parsed, fileName, onConfirm, onRetry }: {
             />
           </div>
 
-          {/* Experience — title/company/period editable */}
-          {experience.length > 0 && (
-            <div className="card-base p-5 rounded-2xl">
-              <h3 className="font-semibold text-sm mb-3" style={{ color: "#0A0A0A" }}>Experience ({experience.length} roles)</h3>
-              <div className="space-y-4">
-                {experience.map((exp, i) => (
-                  <div key={i} className="p-3 rounded-xl" style={{ backgroundColor: "#F8F9FA", border: "1px solid #EBEBEB" }}>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
-                      {(["title", "company", "period"] as const).map(f => (
-                        <div key={f}>
-                          <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{f}</label>
-                          <input
-                            className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
-                            style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
-                            value={exp[f] ?? ""}
-                            onChange={e => setExperience(prev => prev.map((x, j) => j === i ? { ...x, [f]: e.target.value } : x))}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    {exp.bullets && exp.bullets.length > 0 && (
-                      <div className="mt-2">
-                        <div className="text-xs font-medium mb-1" style={{ color: "#888" }}>{exp.bullets.length} bullet{exp.bullets.length !== 1 ? "s" : ""} parsed</div>
-                        <ul className="space-y-1">
-                          {exp.bullets.map((b, bi) => (
-                            <li key={bi}>
-                              <input
-                                className="w-full px-2 py-1 rounded text-xs outline-none"
-                                style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#333" }}
-                                value={b}
-                                onChange={e => setExperience(prev => prev.map((x, j) => j === i
-                                  ? { ...x, bullets: x.bullets!.map((bx, bj) => bj === bi ? e.target.value : bx) }
-                                  : x
-                                ))}
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+          {/* Experience */}
+          <div className="card-base p-5 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm" style={{ color: "#0A0A0A" }}>
+                Experience {experience.length > 0 ? `(${experience.length} role${experience.length !== 1 ? "s" : ""})` : ""}
+              </h3>
+              <button
+                onClick={() => setExperience(prev => [...prev, { title: "", company: "", period: "", location: "", bullets: [] }])}
+                className="text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1"
+                style={{ backgroundColor: "#F0FDF4", color: "#00796b", border: "1px solid #A7F3D0" }}
+              >
+                <Plus className="w-3 h-3" /> Add role
+              </button>
             </div>
-          )}
+            {experience.length === 0 && (
+              <p className="text-xs py-3 text-center" style={{ color: "#AAA" }}>No experience parsed — add a role above</p>
+            )}
+            <div className="space-y-4">
+              {experience.map((exp, i) => (
+                <div key={i} className="p-3 rounded-xl" style={{ backgroundColor: "#F8F9FA", border: "1px solid #EBEBEB" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium" style={{ color: "#888" }}>Role {i + 1}</span>
+                    <button
+                      onClick={() => setExperience(prev => prev.filter((_, j) => j !== i))}
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{ color: "#EF4444", backgroundColor: "#FEF2F2" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+                    {(["title", "company", "period"] as const).map(f => (
+                      <div key={f}>
+                        <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{f}</label>
+                        <input
+                          className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
+                          style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
+                          value={exp[f] ?? ""}
+                          placeholder={f === "period" ? "e.g. Jan 2022 – Present" : ""}
+                          onChange={e => setExperience(prev => prev.map((x, j) => j === i ? { ...x, [f]: e.target.value } : x))}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2">
+                    {exp.bullets && exp.bullets.length > 0 && (
+                      <div className="text-xs font-medium mb-1" style={{ color: "#888" }}>{exp.bullets.length} bullet{exp.bullets.length !== 1 ? "s" : ""}</div>
+                    )}
+                    <ul className="space-y-1">
+                      {(exp.bullets ?? []).map((b, bi) => (
+                        <li key={bi} className="flex gap-1">
+                          <input
+                            className="flex-1 px-2 py-1 rounded text-xs outline-none"
+                            style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#333" }}
+                            value={b}
+                            onChange={e => setExperience(prev => prev.map((x, j) => j === i
+                              ? { ...x, bullets: x.bullets!.map((bx, bj) => bj === bi ? e.target.value : bx) }
+                              : x
+                            ))}
+                          />
+                          <button
+                            onClick={() => setExperience(prev => prev.map((x, j) => j === i
+                              ? { ...x, bullets: x.bullets!.filter((_, bj) => bj !== bi) }
+                              : x
+                            ))}
+                            className="px-1.5 rounded text-xs flex-shrink-0"
+                            style={{ color: "#EF4444", backgroundColor: "#FEF2F2" }}
+                          >×</button>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => setExperience(prev => prev.map((x, j) => j === i ? { ...x, bullets: [...(x.bullets ?? []), ""] } : x))}
+                      className="mt-1.5 text-xs font-medium"
+                      style={{ color: "#00796b" }}
+                    >
+                      + Add bullet
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Education */}
+          <div className="card-base p-5 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm" style={{ color: "#0A0A0A" }}>
+                Education {education.length > 0 ? `(${education.length})` : ""}
+              </h3>
+              <button
+                onClick={() => setEducation(prev => [...prev, { degree: "", school: "", year: "", location: "" }])}
+                className="text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1"
+                style={{ backgroundColor: "#F0FDF4", color: "#00796b", border: "1px solid #A7F3D0" }}
+              >
+                <Plus className="w-3 h-3" /> Add education
+              </button>
+            </div>
+            {education.length === 0 && (
+              <p className="text-xs py-3 text-center" style={{ color: "#AAA" }}>No education parsed — add an entry above</p>
+            )}
+            <div className="space-y-3">
+              {education.map((edu, i) => (
+                <div key={i} className="p-3 rounded-xl" style={{ backgroundColor: "#F8F9FA", border: "1px solid #EBEBEB" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium" style={{ color: "#888" }}>Entry {i + 1}</span>
+                    <button
+                      onClick={() => setEducation(prev => prev.filter((_, j) => j !== i))}
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{ color: "#EF4444", backgroundColor: "#FEF2F2" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {([
+                      { key: "degree", placeholder: "e.g. B.S. Computer Science" },
+                      { key: "school", placeholder: "e.g. Stanford University" },
+                      { key: "year", placeholder: "e.g. 2020" },
+                      { key: "location", placeholder: "e.g. Stanford, CA" },
+                    ] as const).map(({ key, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-xs font-medium mb-1 capitalize" style={{ color: "#666" }}>{key}</label>
+                        <input
+                          className="w-full px-2 py-1.5 rounded-lg text-sm outline-none"
+                          style={{ border: "1px solid #E5E8EA", backgroundColor: "#fff", color: "#0A0A0A" }}
+                          value={(edu as any)[key] ?? ""}
+                          placeholder={placeholder}
+                          onChange={e => setEducation(prev => prev.map((x, j) => j === i ? { ...x, [key]: e.target.value } : x))}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Certifications */}
+          <div className="card-base p-5 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm" style={{ color: "#0A0A0A" }}>
+                Certifications {certifications.length > 0 ? `(${certifications.length})` : ""}
+              </h3>
+              <button
+                onClick={() => setCertifications(prev => [...prev, ""])}
+                className="text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1"
+                style={{ backgroundColor: "#F0FDF4", color: "#00796b", border: "1px solid #A7F3D0" }}
+              >
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            </div>
+            {certifications.length === 0 && (
+              <p className="text-xs py-3 text-center" style={{ color: "#AAA" }}>No certifications parsed — add one above</p>
+            )}
+            <div className="space-y-2">
+              {certifications.map((cert, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ border: "1px solid #E5E8EA", backgroundColor: "#FAFAFA", color: "#0A0A0A" }}
+                    value={cert}
+                    placeholder="e.g. AWS Certified Solutions Architect"
+                    onChange={e => setCertifications(prev => prev.map((c, j) => j === i ? e.target.value : c))}
+                  />
+                  <button
+                    onClick={() => setCertifications(prev => prev.filter((_, j) => j !== i))}
+                    className="px-2.5 rounded-lg text-sm flex-shrink-0"
+                    style={{ color: "#EF4444", backgroundColor: "#FEF2F2", border: "1px solid #FECACA" }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Achievements */}
+          <div className="card-base p-5 rounded-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm" style={{ color: "#0A0A0A" }}>
+                Achievements {achievements.length > 0 ? `(${achievements.length})` : ""}
+              </h3>
+              <button
+                onClick={() => setAchievements(prev => [...prev, ""])}
+                className="text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1"
+                style={{ backgroundColor: "#F0FDF4", color: "#00796b", border: "1px solid #A7F3D0" }}
+              >
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            </div>
+            {achievements.length === 0 && (
+              <p className="text-xs py-3 text-center" style={{ color: "#AAA" }}>No achievements parsed — add one above</p>
+            )}
+            <div className="space-y-2">
+              {achievements.map((ach, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ border: "1px solid #E5E8EA", backgroundColor: "#FAFAFA", color: "#0A0A0A" }}
+                    value={ach}
+                    placeholder="e.g. Led team that increased revenue by 40%"
+                    onChange={e => setAchievements(prev => prev.map((a, j) => j === i ? e.target.value : a))}
+                  />
+                  <button
+                    onClick={() => setAchievements(prev => prev.filter((_, j) => j !== i))}
+                    className="px-2.5 rounded-lg text-sm flex-shrink-0"
+                    style={{ color: "#EF4444", backgroundColor: "#FEF2F2", border: "1px solid #FECACA" }}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-3 mt-6">
