@@ -1487,7 +1487,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
             </div>
 
             <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.75fr)] gap-5">
-              <div className="card-base rounded-2xl">
+              <div className="card-base rounded-2xl order-2 lg:order-1">
                 <div className="px-4 md:px-5 py-4 flex flex-wrap items-center gap-2 rounded-t-2xl overflow-hidden" style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #F0F0F0" }}>
                   <Sparkles className="w-4 h-4" style={{ color: "#00c447" }} />
                   <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Recommended job titles</h3>
@@ -1530,7 +1530,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                       <X className="w-4 h-4 flex-shrink-0" style={{ color: "#888" }} />
                     </button>
                   ))}
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-2 pt-2">
+                  <div className="flex flex-row items-center gap-2 pt-2">
                     <div className="relative flex-1">
                       <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ border: roleSuggestionsOpen ? "1.5px solid #00F0A0" : "1.5px dashed #D0D5DD", backgroundColor: "#F8F9FA" }}>
                       <input
@@ -1588,17 +1588,17 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                       type="button"
                       onClick={addCustomTitle}
                       disabled={!customTitleInput.trim()}
-                      className="flex items-center justify-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-xl"
-                      style={{ backgroundColor: customTitleInput.trim() ? "#0A0A0A" : "#F0F0F0", color: customTitleInput.trim() ? "#fff" : "#999" }}
+                      className="flex items-center justify-center gap-1 text-sm font-semibold px-3 py-2 rounded-xl flex-shrink-0"
+                      style={{ backgroundColor: customTitleInput.trim() ? "#0A0A0A" : "#F0F0F0", color: customTitleInput.trim() ? "#fff" : "#999", minWidth: 40 }}
                     >
-                      <Plus className="w-4 h-4" /> Add
+                      <Plus className="w-4 h-4" /><span className="hidden sm:inline">Add</span>
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Right column: Preferred locations + Search */}
-              <div className="card-base rounded-2xl p-5 flex flex-col gap-4">
+              {/* Right column: Preferred locations + Search (appears first on mobile) */}
+              <div className="card-base rounded-2xl p-5 flex flex-col gap-4 order-1 lg:order-2">
                 <div>
                   <p className="text-xs font-semibold mb-2" style={{ color: "#888" }}>Preferred location(s)</p>
                   <LocationPicker selected={selectedLocations} onChange={setSelectedLocations} maxLocations={3} />
