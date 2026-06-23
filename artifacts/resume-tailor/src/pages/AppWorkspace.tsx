@@ -3149,14 +3149,24 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
 
 // ── Step 4: Export ────────────────────────────────────────────────────────────
 
+function sortByDateDesc<T extends { period?: string; year?: string }>(items: T[]): T[] {
+  const MONTHS: Record<string, number> = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+  function parseStart(s: string | undefined): number {
+    if (!s) return 0;
+    const m = s.match(/([A-Za-z]{3,})\s+(\d{4})|(\d{4})/);
+    if (!m) return 0;
+    const year = parseInt(m[2] || m[3], 10);
+    const mon = m[1] ? (MONTHS[m[1].toLowerCase().slice(0, 3)] ?? 0) : 0;
+    return year * 12 + mon;
+  }
+  return [...items].sort((a, b) => parseStart(b.period ?? b.year) - parseStart(a.period ?? a.year));
+}
+
 // Returns structured skill groups: prefers explicit skillGroups, falls back to parsing
 // "Category: skill1, skill2" patterns from the flat skills array.
 function resolveSkillGroups(resume: ResumeData): { category: string; skills: string[] }[] {
-  const explicit = resume.skillGroups ?? [];
-  if (explicit.length > 0) {
-    const totalSkills = explicit.reduce((n, g) => n + g.skills.length, 0);
-    if (totalSkills > explicit.length) return explicit;
-  }
+  const explicit = (resume.skillGroups ?? []).filter(g => g.category && g.skills.length > 0);
+  if (explicit.length > 0) return explicit;
   const flat = resume.skills ?? [];
   const catRe = /^([A-Za-z][^:]{2,39}):\s*(.+)$/;
   const derived: { category: string; skills: string[] }[] = [];
@@ -3394,17 +3404,17 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
       {(resume.experience ?? []).length > 0 && (
         <>
           <div style={sectionStyle}>Experience</div>
-          {resume.experience!.map((exp, i) => (
+          {sortByDateDesc(resume.experience!).map((exp, i) => (
             <div key={i} style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <strong style={{ fontSize: 13.5, color: "#111" }}>{exp.company}</strong>
-                <span style={{ fontSize: 12, color: "#666" }}>{exp.period}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <span style={{ fontSize: 13.5, color: "#111" }}>
+                  <strong>{exp.title}</strong>
+                  <strong> at {exp.company}</strong>
+                  {exp.location && <span style={{ fontWeight: "normal", color: "#555" }}>, {exp.location}</span>}
+                </span>
+                <span style={{ fontSize: 12, color: "#666", whiteSpace: "nowrap" }}>{exp.period}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                <em style={{ fontSize: 12.5, color: "#444" }}>{exp.title}</em>
-                {exp.location && <span style={{ fontSize: 11.5, color: "#888" }}>{exp.location}</span>}
-              </div>
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <ul style={{ margin: "4px 0 0 0", paddingLeft: 18 }}>
                 {(exp.bullets ?? []).map((b, bi) => (
                   <li key={bi} style={{ fontSize: 13, color: "#222", marginBottom: 3 }}>{b}</li>
                 ))}
@@ -3417,15 +3427,13 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
       {(resume.education ?? []).length > 0 && (
         <>
           <div style={sectionStyle}>Education</div>
-          {resume.education!.map((e, i) => (
+          {sortByDateDesc(resume.education!).map((e, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <strong style={{ fontSize: 13, color: "#111" }}>{e.school}</strong>
-                <span style={{ fontSize: 12, color: "#666" }}>{e.year}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <em style={{ fontSize: 12.5, color: "#444" }}>{e.degree}</em>
-                {e.location && <span style={{ fontSize: 11.5, color: "#888" }}>{e.location}</span>}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <strong style={{ fontSize: 13, color: "#111" }}>
+                  {[e.degree, e.school, e.location].filter(Boolean).join(", ")}
+                </strong>
+                <span style={{ fontSize: 12, color: "#666", whiteSpace: "nowrap" }}>{e.year}</span>
               </div>
               {e.notes && <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>• {e.notes}</div>}
             </div>
@@ -3611,31 +3619,43 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   // ── Experience ──
   if ((resume.experience ?? []).length > 0) {
     sectionHead("Experience");
-    for (const exp of resume.experience!) {
+    for (const exp of sortByDateDesc(resume.experience!)) {
       bp(16);
-      // Company (bold) on left, period on right
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(10.5);
-      setColor(10, 10, 10);
-      pdf.text(pdfSafeText(exp.company), mL, y);
+      // "Title at Company, Location" on left | Period on right
+      const periodText = pdfSafeText(exp.period ?? "");
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(9.5);
       setColor(90, 90, 90);
-      pdf.text(pdfSafeText(exp.period ?? ""), pageW - mR, y, { align: "right" });
-      y += 4.8;
+      const periodW = pdf.getTextWidth(periodText);
+      pdf.text(periodText, pageW - mR, y, { align: "right" });
 
-      // Title (italic) on left, location on right
-      pdf.setFont("helvetica", "italic");
-      pdf.setFontSize(10);
-      setColor(55, 55, 55);
-      pdf.text(pdfSafeText(exp.title), mL, y);
-      if (exp.location) {
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(9.5);
-        setColor(90, 90, 90);
-        pdf.text(pdfSafeText(exp.location), pageW - mR, y, { align: "right" });
+      const titleCompanyStr = `${pdfSafeText(exp.title)} at ${pdfSafeText(exp.company)}`;
+      const locSuffix = exp.location ? `, ${pdfSafeText(exp.location)}` : "";
+      const maxTitleW = textW - periodW - 4;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10.5);
+      setColor(10, 10, 10);
+      if (pdf.getTextWidth(titleCompanyStr + locSuffix) <= maxTitleW) {
+        pdf.text(titleCompanyStr, mL, y);
+        if (locSuffix) {
+          const tcW = pdf.getTextWidth(titleCompanyStr);
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
+          setColor(70, 70, 70);
+          pdf.text(locSuffix, mL + tcW, y);
+        }
+        y += 5;
+      } else {
+        const wrapped = pdf.splitTextToSize(titleCompanyStr + locSuffix, maxTitleW);
+        pdf.text(wrapped[0], mL, y);
+        y += 5;
+        for (let i = 1; i < wrapped.length; i++) {
+          bp(5);
+          pdf.text(wrapped[i], mL, y);
+          y += 4.8;
+        }
       }
-      y += 4.5;
 
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(10);
@@ -3660,38 +3680,40 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   // ── Education ──
   if ((resume.education ?? []).length > 0) {
     sectionHead("Education");
-    for (const edu of resume.education!) {
+    for (const edu of sortByDateDesc(resume.education!)) {
       bp(12);
-      // School (bold) on left, year on right
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(10.5);
-      setColor(10, 10, 10);
-      pdf.text(edu.school ?? "", mL, y);
+      // "Degree, School, Location" on left | Year on right
+      const yearText = pdfSafeText(edu.year ?? "");
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(9.5);
       setColor(90, 90, 90);
-      pdf.text(edu.year ?? "", pageW - mR, y, { align: "right" });
+      pdf.text(yearText, pageW - mR, y, { align: "right" });
+      const yearW = pdf.getTextWidth(yearText);
+
+      const degSchool = pdfSafeText([edu.degree, edu.school, edu.location].filter(Boolean).join(", "));
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10.5);
+      setColor(10, 10, 10);
+      const maxEduW = textW - yearW - 4;
+      const eduWrapped = pdf.splitTextToSize(degSchool, maxEduW);
+      pdf.text(eduWrapped[0], mL, y);
       y += 4.8;
-      // Degree (italic) on left, location on right
-      if (edu.degree) {
-        pdf.setFont("helvetica", "italic");
-        pdf.setFontSize(10);
-        setColor(55, 55, 55);
-        pdf.text(edu.degree, mL, y);
-        if (edu.location) {
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(9.5);
-          setColor(90, 90, 90);
-          pdf.text(edu.location, pageW - mR, y, { align: "right" });
-        }
+      for (let i = 1; i < eduWrapped.length; i++) {
+        bp(4.8);
+        pdf.text(eduWrapped[i], mL, y);
         y += 4.8;
       }
+
       if (edu.notes) {
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(9.5);
         setColor(80, 80, 80);
-        pdf.text(`• ${edu.notes}`, mL + 3, y);
-        y += 4.5;
+        const notesWrapped = pdf.splitTextToSize(pdfSafeText(`• ${edu.notes}`), textW - 3);
+        for (const nl of notesWrapped) {
+          bp(4.5);
+          pdf.text(nl, mL + 3, y);
+          y += 4.5;
+        }
       }
       y += 2;
     }
@@ -3850,25 +3872,17 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
   // ── Experience ──
   if ((resume.experience ?? []).length > 0) {
     children.push(sectionHeading("Experience"));
-    for (const exp of resume.experience!) {
-      // Company (bold, left) + Period (right) on one line via tab stop
+    for (const exp of sortByDateDesc(resume.experience!)) {
+      // "Title at Company, Location" (left) | Period (right)
       children.push(new Paragraph({
         children: [
-          new TextRun({ text: exp.company, bold: true, size: 24, font: "Calibri", color: "0A0A0A" }),
+          new TextRun({ text: `${exp.title} at ${exp.company}`, bold: true, size: 24, font: "Calibri", color: "0A0A0A" }),
+          ...(exp.location ? [new TextRun({ text: `, ${exp.location}`, size: 22, font: "Calibri", color: "444444" })] : []),
           new TextRun({ text: "\t" }),
           new TextRun({ text: exp.period ?? "", size: 20, font: "Calibri", color: "555555" }),
         ],
         tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
-        spacing: { before: 100, after: 30 },
-      }));
-      // Title (italic, left) + Location (right)
-      children.push(new Paragraph({
-        children: [
-          new TextRun({ text: exp.title, italics: true, size: 22, font: "Calibri", color: "333333" }),
-          ...(exp.location ? [new TextRun({ text: "\t" }), new TextRun({ text: exp.location, size: 20, font: "Calibri", color: "555555" })] : []),
-        ],
-        tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
-        spacing: { after: 60 },
+        spacing: { before: 100, after: 60 },
       }));
       // Bullets
       for (const bullet of exp.bullets ?? []) {
@@ -3884,32 +3898,21 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
   // ── Education ──
   if ((resume.education ?? []).length > 0) {
     children.push(sectionHeading("Education"));
-    for (const edu of resume.education!) {
-      // School (bold, left) + Year (right)
+    for (const edu of sortByDateDesc(resume.education!)) {
+      // "Degree, School, Location" (bold, left) | Year (right)
+      const degSchoolLoc = [edu.degree, edu.school, edu.location].filter(Boolean).join(", ");
       children.push(new Paragraph({
         children: [
-          new TextRun({ text: edu.school ?? "", bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
+          new TextRun({ text: degSchoolLoc, bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
           new TextRun({ text: "\t" }),
           new TextRun({ text: edu.year ?? "", size: 20, font: "Calibri", color: "555555" }),
         ],
         tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
-        spacing: { before: 80, after: 30 },
+        spacing: { before: 80, after: edu.notes ? 20 : 60 },
       }));
-      // Degree (italic, left) + Location (right)
-      if (edu.degree) {
-        children.push(new Paragraph({
-          children: [
-            new TextRun({ text: edu.degree, italics: true, size: 22, font: "Calibri", color: "333333" }),
-            ...(edu.location ? [new TextRun({ text: "\t" }), new TextRun({ text: edu.location, size: 20, font: "Calibri", color: "555555" })] : []),
-          ],
-          tabStops: [{ type: TabStopType.RIGHT, position: 9026 }],
-          spacing: { after: edu.notes ? 20 : 60 },
-        }));
-      }
       if (edu.notes) {
         children.push(new Paragraph({
           children: [new TextRun({ text: edu.notes, size: 20, font: "Calibri", color: "555555" })],
-          bullet: { level: 0 },
           spacing: { after: 50 },
         }));
       }
