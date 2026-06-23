@@ -3617,10 +3617,18 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
         }
       }
     } else {
+      // No groups — show as bullet-per-chunk-of-5 instead of one long paragraph
       pdf.setFont("helvetica", "normal");
-      const skillLine = pdfSafeText(resume.skills!.join(", "));
-      const wrapped = pdf.splitTextToSize(skillLine, textW);
-      for (const line of wrapped) { bp(5); pdf.text(line, mL, y); y += 4.8; }
+      pdf.setFontSize(10);
+      setColor(20, 20, 20);
+      const allSkills = resume.skills ?? [];
+      const CHUNK = 5;
+      for (let i = 0; i < allSkills.length; i += CHUNK) {
+        const line = pdfSafeText(allSkills.slice(i, i + CHUNK).join(", "));
+        bp(4.8);
+        pdf.text(`• ${line}`, mL + 1, y);
+        y += 4.8;
+      }
     }
     y += 1;
   }
@@ -3888,10 +3896,16 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
         }));
       }
     } else {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: resume.skills!.join(", "), size: 22, font: "Calibri", color: "111111" })],
-        spacing: { after: 80 },
-      }));
+      // No groups — show as bullet-per-chunk-of-5 instead of one long paragraph
+      const allSkills = resume.skills ?? [];
+      const CHUNK = 5;
+      for (let i = 0; i < allSkills.length; i += CHUNK) {
+        children.push(new Paragraph({
+          children: [new TextRun({ text: allSkills.slice(i, i + CHUNK).join(", "), size: 22, font: "Calibri", color: "111111" })],
+          bullet: { level: 0 },
+          spacing: { after: 40 },
+        }));
+      }
     }
   }
 

@@ -457,6 +457,10 @@ router.post("/parse", upload.single("file"), async (req, res) => {
     if (cached.rows.length > 0) {
       // Re-apply sanitization on cached results so fixes apply without re-parsing
       const cachedResult = cached.rows[0].result;
+      // If cached parse lacks skillGroups, fall through to fresh AI parse so the prompt upgrade takes effect
+      if (cachedResult?.resume && (cachedResult.resume.skillGroups ?? []).length === 0 && (cachedResult.resume.skills ?? []).length > 0) {
+        // intentional fall-through
+      } else {
       if (cachedResult?.resume) {
         cachedResult.resume = sanitizeResumeRecord(cachedResult.resume);
         // Backfill contact fields the AI may have missed using regex on the raw text
@@ -466,6 +470,7 @@ router.post("/parse", upload.single("file"), async (req, res) => {
         if (!cachedResult.resume.contact.linkedin && regexContact.linkedin) cachedResult.resume.contact.linkedin = regexContact.linkedin;
       }
       return res.json(cachedResult);
+      }
     }
   } catch {
     // Cache lookup failure is non-fatal — fall through to AI parse
