@@ -613,8 +613,8 @@ function LocationPicker({
           {/* Dropdown */}
           {open && (filtered.length > 0 || hasCustomQuery || apiLoading) && (
             <div
-              className="absolute z-20 w-full mt-1 rounded-xl shadow-lg overflow-hidden"
-              style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}
+              className="absolute z-20 left-0 right-0 mt-1 rounded-xl shadow-lg overflow-hidden"
+              style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: "40vh", overflowY: "auto" }}
             >
               {filtered.map(({ label, icon }) => (
                 <button
@@ -1396,16 +1396,16 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
   }
 
   return (
-    <div className="flex-1 p-4 md:p-8 overflow-auto">
+    <div className="flex-1 p-3 sm:p-4 md:p-8 overflow-auto">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="chip-mint inline-flex mb-3">Step 1 of 4</div>
-          <h1 className="font-heading font-bold text-2xl md:text-3xl mb-2" style={{ color: "#0A0A0A" }}>Career Vault</h1>
+        <div className="mb-5 md:mb-8">
+          <div className="chip-mint inline-flex mb-2 md:mb-3">Step 1 of 4</div>
+          <h1 className="font-heading font-bold text-xl sm:text-2xl md:text-3xl mb-1 md:mb-2" style={{ color: "#0A0A0A" }}>Career Vault</h1>
           <p className="text-base" style={{ color: "#666" }}>Upload your resume, confirm target roles and locations, then search live postings matched to your experience.</p>
         </div>
 
         {!uploaded ? (
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt" className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
@@ -1486,9 +1486,9 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
               <DirectJobLinksPanel enabled={uploaded} credits={credits} onBuyCredits={onBuyCredits} onJobsFetched={onDirectJobs} />
             </div>
 
-            <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.75fr)] gap-5">
-              <div className="card-base rounded-2xl">
-                <div className="px-4 md:px-5 py-4 flex flex-wrap items-center gap-2 rounded-t-2xl overflow-hidden" style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #F0F0F0" }}>
+            <div className="grid md:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.75fr)] gap-3 md:gap-5">
+              <div className="card-base rounded-2xl order-2 md:order-1">
+                <div className="px-4 md:px-5 py-4 flex flex-wrap items-center gap-2 rounded-t-2xl" style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #F0F0F0" }}>
                   <Sparkles className="w-4 h-4" style={{ color: "#00c447" }} />
                   <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Recommended job titles</h3>
                   <span className="text-xs md:ml-1" style={{ color: "#888" }}>Inferred from your resume. Select targets.</span>
@@ -1530,7 +1530,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                       <X className="w-4 h-4 flex-shrink-0" style={{ color: "#888" }} />
                     </button>
                   ))}
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-2 pt-2">
+                  <div className="flex flex-row items-center gap-2 pt-2">
                     <div className="relative flex-1">
                       <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ border: roleSuggestionsOpen ? "1.5px solid #00F0A0" : "1.5px dashed #D0D5DD", backgroundColor: "#F8F9FA" }}>
                       <input
@@ -1554,7 +1554,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                       {roleApiLoading && <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />}
                       </div>
                       {roleSuggestionsOpen && (roleSuggestions.length > 0 || customTitleInput.trim()) && (
-                        <div className="absolute z-50 w-full mt-1 rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: 260, overflowY: "auto" }}>
+                        <div className="absolute z-50 left-0 right-0 mt-1 rounded-xl shadow-lg overflow-hidden" style={{ backgroundColor: "#fff", border: "1px solid #E0E0E0", maxHeight: "40vh", overflowY: "auto" }}>
                           {roleSuggestions.map(title => (
                             <button
                               key={title}
@@ -1588,22 +1588,22 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                       type="button"
                       onClick={addCustomTitle}
                       disabled={!customTitleInput.trim()}
-                      className="flex items-center justify-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-xl"
-                      style={{ backgroundColor: customTitleInput.trim() ? "#0A0A0A" : "#F0F0F0", color: customTitleInput.trim() ? "#fff" : "#999" }}
+                      className="flex items-center justify-center gap-1 text-sm font-semibold rounded-xl flex-shrink-0"
+                      style={{ backgroundColor: customTitleInput.trim() ? "#0A0A0A" : "#E5E8EA", color: customTitleInput.trim() ? "#fff" : "#999", width: 44, height: 44, border: `1.5px solid ${customTitleInput.trim() ? "transparent" : "#D0D5DD"}` }}
                     >
-                      <Plus className="w-4 h-4" /> Add
+                      <Plus className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Right column: Preferred locations + Search */}
-              <div className="card-base rounded-2xl p-5 flex flex-col gap-4">
+              {/* Right column: Preferred locations + Search (appears first on mobile) */}
+              <div className="card-base rounded-2xl p-4 md:p-5 flex flex-col gap-4 order-1 md:order-2">
                 <div>
                   <p className="text-xs font-semibold mb-2" style={{ color: "#888" }}>Preferred location(s)</p>
                   <LocationPicker selected={selectedLocations} onChange={setSelectedLocations} maxLocations={3} />
                 </div>
-                <div className="mt-auto flex flex-col gap-2">
+                <div className="flex flex-col gap-2">
                   <p className="text-xs" style={{ color: "#888" }}>
                     {selectedTitles.size} title{selectedTitles.size !== 1 ? "s" : ""} selected
                     {selectedLocations.length > 0 ? ` · ${selectedLocations.join(", ")}` : ""}
