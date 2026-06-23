@@ -3439,10 +3439,9 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
           {sortByDateDesc(resume.education!).map((e, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                <span style={{ fontSize: 13, color: "#111" }}>
-                  <strong>{[e.degree, e.school].filter(Boolean).join(", ")}</strong>
-                  {e.location && <span style={{ fontWeight: "normal", color: "#666" }}>, {e.location}</span>}
-                </span>
+                <strong style={{ fontSize: 13, color: "#111" }}>
+                  {[e.degree, e.school, e.location].filter(Boolean).join(", ")}
+                </strong>
                 <span style={{ fontSize: 12, color: "#666", whiteSpace: "nowrap" }}>{e.year}</span>
               </div>
               {e.notes && <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>• {e.notes}</div>}
@@ -3717,7 +3716,7 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
     sectionHead("Education");
     for (const edu of sortByDateDesc(resume.education!)) {
       bp(12);
-      // "Degree, School" on left | Year on right; Location on its own smaller line if too long
+      // "Degree, School, Location" all bold on left | Year on right (matches reference format)
       const yearText = pdfSafeText(edu.year ?? "");
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(9.5);
@@ -3725,40 +3724,18 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
       pdf.text(yearText, pageW - mR, y, { align: "right" });
       const yearW = pdf.getTextWidth(yearText);
 
-      const degSchoolStr = pdfSafeText([edu.degree, edu.school].filter(Boolean).join(", "));
-      const eduLocStr = edu.location ? pdfSafeText(edu.location) : "";
-      const maxEduW = textW - yearW - 4;
-
+      const degSchool = pdfSafeText([edu.degree, edu.school, edu.location].filter(Boolean).join(", "));
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10.5);
       setColor(10, 10, 10);
-
-      if (pdf.getTextWidth(degSchoolStr + (eduLocStr ? `, ${eduLocStr}` : "")) <= maxEduW) {
-        pdf.text(degSchoolStr, mL, y);
-        if (eduLocStr) {
-          const dsW = pdf.getTextWidth(degSchoolStr);
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(10);
-          setColor(70, 70, 70);
-          pdf.text(`, ${eduLocStr}`, mL + dsW, y);
-        }
+      const maxEduW = textW - yearW - 4;
+      const eduWrapped = pdf.splitTextToSize(degSchool, maxEduW);
+      pdf.text(eduWrapped[0], mL, y);
+      y += 4.8;
+      for (let i = 1; i < eduWrapped.length; i++) {
+        bp(4.8);
+        pdf.text(eduWrapped[i], mL, y);
         y += 4.8;
-      } else {
-        const dsWrapped = pdf.splitTextToSize(degSchoolStr, maxEduW);
-        pdf.text(dsWrapped[0], mL, y);
-        y += 4.8;
-        for (let i = 1; i < dsWrapped.length; i++) {
-          bp(4.8);
-          pdf.text(dsWrapped[i], mL, y);
-          y += 4.8;
-        }
-        if (eduLocStr) {
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(9.5);
-          setColor(90, 90, 90);
-          pdf.text(eduLocStr, mL, y);
-          y += 4.5;
-        }
       }
 
       if (edu.notes) {
@@ -3962,13 +3939,11 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
   if ((resume.education ?? []).length > 0) {
     children.push(sectionHeading("Education"));
     for (const edu of sortByDateDesc(resume.education!)) {
-      // "Degree, School" (bold) + ", Location" (gray) | Year (right) — location separate to match experience format
-      const degSchoolDocx = [edu.degree, edu.school].filter(Boolean).join(", ");
-      const eduLocDocx = edu.location ?? "";
+      // "Degree, School, Location" all bold | Year right — matches reference format
+      const degSchoolLocDocx = [edu.degree, edu.school, edu.location].filter(Boolean).join(", ");
       children.push(new Paragraph({
         children: [
-          new TextRun({ text: degSchoolDocx, bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
-          ...(eduLocDocx ? [new TextRun({ text: `, ${eduLocDocx}`, size: 20, font: "Calibri", color: "666666" })] : []),
+          new TextRun({ text: degSchoolLocDocx, bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
           new TextRun({ text: "\t" }),
           new TextRun({ text: edu.year ?? "", size: 20, font: "Calibri", color: "555555" }),
         ],
