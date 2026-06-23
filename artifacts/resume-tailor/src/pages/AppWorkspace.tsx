@@ -3439,9 +3439,10 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
           {sortByDateDesc(resume.education!).map((e, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                <strong style={{ fontSize: 13, color: "#111" }}>
-                  {[e.degree, e.school, e.location].filter(Boolean).join(", ")}
-                </strong>
+                <span style={{ fontSize: 13, color: "#111" }}>
+                  <strong>{[e.degree, e.school].filter(Boolean).join(", ")}</strong>
+                  {e.location && <span style={{ fontWeight: "normal", color: "#666" }}>, {e.location}</span>}
+                </span>
                 <span style={{ fontSize: 12, color: "#666", whiteSpace: "nowrap" }}>{e.year}</span>
               </div>
               {e.notes && <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>• {e.notes}</div>}
