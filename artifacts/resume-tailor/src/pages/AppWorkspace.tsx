@@ -3166,8 +3166,17 @@ function sortByDateDesc<T extends { period?: string; year?: string }>(items: T[]
 // "Category: skill1, skill2" patterns from the flat skills array.
 function resolveSkillGroups(resume: ResumeData): { category: string; skills: string[] }[] {
   const explicit = (resume.skillGroups ?? []).filter(g => g.category && g.skills.length > 0);
-  if (explicit.length > 0) return explicit;
   const flat = resume.skills ?? [];
+
+  if (explicit.length > 0) {
+    // Use explicit groups, but also surface any flat skills added by tailoring that aren't in any group
+    const covered = new Set(explicit.flatMap(g => g.skills.map(s => s.toLowerCase())));
+    const tailoredExtra = flat.filter(s => !covered.has(s.toLowerCase()) && !s.match(/^[A-Za-z][^:]{2,39}:/));
+    if (tailoredExtra.length === 0) return explicit;
+    return [...explicit, { category: "Additional Skills", skills: tailoredExtra }];
+  }
+
+  // No explicit groups — try to parse "Category: skill1, skill2" patterns from flat list
   const catRe = /^([A-Za-z][^:]{2,39}):\s*(.+)$/;
   const derived: { category: string; skills: string[] }[] = [];
   let cur: { category: string; skills: string[] } | null = null;
@@ -3630,30 +3639,40 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
       pdf.text(periodText, pageW - mR, y, { align: "right" });
 
       const titleCompanyStr = `${pdfSafeText(exp.title)} at ${pdfSafeText(exp.company)}`;
-      const locSuffix = exp.location ? `, ${pdfSafeText(exp.location)}` : "";
-      const maxTitleW = textW - periodW - 4;
+      const locStr = exp.location ? pdfSafeText(exp.location) : "";
+      const maxLineW = textW - periodW - 4;
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10.5);
       setColor(10, 10, 10);
-      if (pdf.getTextWidth(titleCompanyStr + locSuffix) <= maxTitleW) {
+
+      if (pdf.getTextWidth(titleCompanyStr + (locStr ? `, ${locStr}` : "")) <= maxLineW) {
+        // Everything fits on one line
         pdf.text(titleCompanyStr, mL, y);
-        if (locSuffix) {
+        if (locStr) {
           const tcW = pdf.getTextWidth(titleCompanyStr);
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(10);
           setColor(70, 70, 70);
-          pdf.text(locSuffix, mL + tcW, y);
+          pdf.text(`, ${locStr}`, mL + tcW, y);
         }
         y += 5;
       } else {
-        const wrapped = pdf.splitTextToSize(titleCompanyStr + locSuffix, maxTitleW);
-        pdf.text(wrapped[0], mL, y);
+        // Title+company on line 1 (with period), location on its own line in smaller gray
+        const tcWrapped = pdf.splitTextToSize(titleCompanyStr, maxLineW);
+        pdf.text(tcWrapped[0], mL, y);
         y += 5;
-        for (let i = 1; i < wrapped.length; i++) {
+        for (let i = 1; i < tcWrapped.length; i++) {
           bp(5);
-          pdf.text(wrapped[i], mL, y);
+          pdf.text(tcWrapped[i], mL, y);
           y += 4.8;
+        }
+        if (locStr) {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(9.5);
+          setColor(90, 90, 90);
+          pdf.text(locStr, mL, y);
+          y += 4.5;
         }
       }
 
@@ -3662,8 +3681,15 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
       setColor(20, 20, 20);
       for (const bullet of exp.bullets ?? []) {
         const lines = pdf.splitTextToSize(pdfSafeText(bullet), textW - 5);
+        const bulletH = lines.length * 4.8;
+        if (y + bulletH > pageH - mB && bulletH <= pageH - mT - mB) {
+          pdf.addPage(); y = mT;
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
+          setColor(20, 20, 20);
+        }
         for (let i = 0; i < lines.length; i++) {
-          bp(5);
+          if (y + 4.8 > pageH - mB) { pdf.addPage(); y = mT; }
           if (i === 0) {
             pdf.text("\u2022", mL + 0.5, y);
             pdf.text(lines[i], mL + 5, y);
