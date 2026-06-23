@@ -684,6 +684,7 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
   const [urlFetchStates, setUrlFetchStates] = useState<Record<string, { status: "loading" | "done" | "error"; error?: string }>>({});
   const [urlFetching, setUrlFetching] = useState(false);
   const [error, setError] = useState("");
+  const [mobileExpanded, setMobileExpanded] = useState(false);
 
   const urlLines = urlInput
     .split(/[\n,]+/)
@@ -732,10 +733,23 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
 
   return (
     <div className="card-base rounded-2xl overflow-hidden h-fit">
-      <div className="px-4 md:px-5 py-4 flex items-center gap-2" style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #F0F0F0" }}>
-        <Link2 className="w-4 h-4" style={{ color: "#00c447" }} />
-        <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Have job links?</h3>
-      </div>
+      <button
+        type="button"
+        className="w-full px-4 md:px-5 py-4 flex items-center justify-between gap-2 text-left"
+        style={{ backgroundColor: "#F8F9FA", borderBottom: mobileExpanded ? "1px solid #F0F0F0" : "none" }}
+        onClick={() => setMobileExpanded(e => !e)}
+      >
+        <div className="flex items-center gap-2">
+          <Link2 className="w-4 h-4" style={{ color: "#00c447" }} />
+          <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Have job links?</h3>
+          <span className="text-xs hidden md:inline" style={{ color: "#888" }}>Paste URLs to skip job search</span>
+        </div>
+        <ChevronDown
+          className="w-4 h-4 md:hidden transition-transform"
+          style={{ color: "#888", transform: mobileExpanded ? "rotate(180deg)" : "none" }}
+        />
+      </button>
+      <div className={mobileExpanded ? "block" : "hidden md:block"}>
       <div className="p-4 md:p-5">
         <p className="text-xs mb-3" style={{ color: "#888" }}>
           Paste up to {MAX_CUSTOM_URLS} job posting URLs. We will fetch the descriptions and jump straight to Review & Confirm.
@@ -745,7 +759,7 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
           onChange={e => setUrlInput(e.target.value)}
           disabled={!enabled || urlFetching}
           placeholder={"https://linkedin.com/jobs/view/...\nhttps://boards.greenhouse.io/company/jobs/..."}
-          rows={8}
+          rows={4}
           className="w-full rounded-xl p-3 text-sm resize-y outline-none font-mono"
           style={{
             border: "1.5px solid #D0D5DD",
@@ -786,6 +800,7 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -2598,12 +2613,43 @@ function ATSChecklistCard({ atsChecks, resume, onUpdateResume }: {
   );
 }
 
+// ── Tailoring result cache (survives tab-switch / iOS background kill) ─────────
+
+const TAILORING_CACHE_KEY = "resume_tailoring_cache_v1";
+const TAILORING_CACHE_TTL = 4 * 3600 * 1000; // 4 hours
+
+function saveTailoringCache(jobId: string, state: JobTailoringState) {
+  try {
+    const raw = localStorage.getItem(TAILORING_CACHE_KEY);
+    const cache: Record<string, unknown> = raw ? JSON.parse(raw) : {};
+    cache[jobId] = { ...state, savedAt: Date.now() };
+    localStorage.setItem(TAILORING_CACHE_KEY, JSON.stringify(cache));
+  } catch {}
+}
+
+function loadTailoringCache(jobId: string): JobTailoringState | null {
+  try {
+    const raw = localStorage.getItem(TAILORING_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as Record<string, JobTailoringState & { savedAt?: number }>;
+    const entry = cache[jobId];
+    if (!entry?.result) return null;
+    if (Date.now() - (entry.savedAt ?? 0) > TAILORING_CACHE_TTL) return null;
+    return { status: "done", statusMsg: "", result: entry.result, rows: entry.rows ?? [], error: "" };
+  } catch { return null; }
+}
+
 function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCredits, onCreditsUpdated, user, onAutoSave, onUpdateResume }: { selectedJobs: JobResult[]; resume: ResumeData; creditSkipNotice: string; onNext: (diffs: Record<string, DiffChange[]>) => void; onBuyCredits: () => void; onCreditsUpdated: () => Promise<CreditBalance | null>; user: { id: string } | null; onAutoSave: (version: SavedVersion) => void; onUpdateResume: (r: ResumeData) => void; }) {
   const [activeJobId, setActiveJobId] = useState<string>(selectedJobs[0]?.id ?? "");
   const [jobStates, setJobStates] = useState<Record<string, JobTailoringState>>(() =>
-    Object.fromEntries(selectedJobs.map(j => [j.id, { status: "idle", statusMsg: "", result: null, rows: [], error: "" }]))
+    Object.fromEntries(selectedJobs.map(j => {
+      const cached = loadTailoringCache(j.id);
+      return [j.id, cached ?? { status: "idle", statusMsg: "", result: null, rows: [], error: "" }];
+    }))
   );
-  const tailoringStarted = useRef<Set<string>>(new Set());
+  const tailoringStarted = useRef<Set<string>>(
+    new Set(selectedJobs.filter(j => loadTailoringCache(j.id) !== null).map(j => j.id))
+  );
 
   const runTailoring = useCallback(async (job: JobResult) => {
     if (tailoringStarted.current.has(job.id)) return;
@@ -2637,10 +2683,9 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         onResult: (result) => {
           const cleanChanges = (result.changes ?? []).map(sanitizeDiffChange).filter((change) => change.proposed || change.status !== "rewritten");
           const cleanResult = { ...result, changes: cleanChanges };
-          setJobStates(prev => ({
-            ...prev,
-            [job.id]: { status: "done", statusMsg: "", result: cleanResult, rows: cleanChanges, error: "" },
-          }));
+          const newState: JobTailoringState = { status: "done", statusMsg: "", result: cleanResult, rows: cleanChanges, error: "" };
+          setJobStates(prev => ({ ...prev, [job.id]: newState }));
+          saveTailoringCache(job.id, newState);
           void onCreditsUpdated();
           // Auto-save immediately so the record exists even if user never reaches Step 5
           if (user) {
@@ -2680,6 +2725,41 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
     selectedJobs.forEach((job) => {
       void runTailoring(job);
     });
+  }, [selectedJobs, runTailoring]);
+
+  // Keep a ref to latest jobStates for use inside event listeners
+  const jobStatesRef = useRef(jobStates);
+  useEffect(() => { jobStatesRef.current = jobStates; }, [jobStates]);
+
+  // On tab/app return (visibilitychange), auto-retry any job that failed or was
+  // interrupted mid-stream (iOS Safari throws "Load failed" when backgrounded).
+  useEffect(() => {
+    const handleVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      selectedJobs.forEach(job => {
+        const st = jobStatesRef.current[job.id];
+        if (st?.status === "error" || st?.status === "loading") {
+          tailoringStarted.current.delete(job.id);
+          setJobStates(prev => ({
+            ...prev,
+            [job.id]: { status: "idle", statusMsg: "", result: null, rows: [], error: "" },
+          }));
+          void runTailoring(job);
+        }
+      });
+    };
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => document.removeEventListener("visibilitychange", handleVisible);
+  }, [selectedJobs, runTailoring]);
+
+  const handleRetryJob = useCallback((jobId: string) => {
+    tailoringStarted.current.delete(jobId);
+    setJobStates(prev => ({
+      ...prev,
+      [jobId]: { status: "idle", statusMsg: "", result: null, rows: [], error: "" },
+    }));
+    const job = selectedJobs.find(j => j.id === jobId);
+    if (job) void runTailoring(job);
   }, [selectedJobs, runTailoring]);
 
   const updateRow = (jobId: string, rowId: string, patch: Partial<DiffChange>) => {
@@ -2840,9 +2920,18 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
           </div>
         )}
         {activeState?.status === "error" && (
-          <div className="mb-5 p-4 rounded-xl flex items-center gap-3" style={{ backgroundColor: "#FEE2E2", border: "1px solid #FCA5A5" }}>
-            <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: "#EF4444" }} />
-            <p className="text-sm" style={{ color: "#991B1B" }}>{activeState.error}</p>
+          <div className="mb-5 p-4 rounded-xl flex items-center justify-between gap-3 flex-wrap" style={{ backgroundColor: "#FEE2E2", border: "1px solid #FCA5A5" }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: "#EF4444" }} />
+              <p className="text-sm" style={{ color: "#991B1B" }}>{activeState.error}</p>
+            </div>
+            <button
+              onClick={() => handleRetryJob(activeJobId)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full flex-shrink-0"
+              style={{ backgroundColor: "white", color: "#991B1B", border: "1px solid #FCA5A5" }}
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Retry
+            </button>
           </div>
         )}
         {creditSkipNotice && (
