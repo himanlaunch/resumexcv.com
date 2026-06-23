@@ -3618,17 +3618,29 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
         }
       }
     } else {
-      // No groups — show as bullet-per-chunk-of-5 instead of one long paragraph
+      // No groups — fill each bullet line by width (never overflow margin)
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(10);
       setColor(20, 20, 20);
-      const allSkills = resume.skills ?? [];
-      const CHUNK = 5;
-      for (let i = 0; i < allSkills.length; i += CHUNK) {
-        const line = pdfSafeText(allSkills.slice(i, i + CHUNK).join(", "));
-        bp(4.8);
-        pdf.text(`• ${line}`, mL + 1, y);
-        y += 4.8;
+      const bulletIndent = 5;
+      const maxSkillW = textW - bulletIndent;
+      const skillQueue = [...(resume.skills ?? [])];
+      while (skillQueue.length > 0) {
+        const lineSkills: string[] = [];
+        while (skillQueue.length > 0) {
+          const candidate = [...lineSkills, skillQueue[0]].join(", ");
+          if (lineSkills.length > 0 && pdf.getTextWidth(pdfSafeText(candidate)) > maxSkillW) break;
+          lineSkills.push(skillQueue.shift()!);
+        }
+        const lineText = pdfSafeText(lineSkills.join(", "));
+        // If a single skill is still too wide, wrap it
+        const wrapped = pdf.splitTextToSize(lineText, maxSkillW);
+        for (let wi = 0; wi < wrapped.length; wi++) {
+          bp(4.8);
+          if (wi === 0) pdf.text("•", mL + 0.5, y);
+          pdf.text(wrapped[wi], mL + bulletIndent, y);
+          y += 4.8;
+        }
       }
     }
     y += 1;
