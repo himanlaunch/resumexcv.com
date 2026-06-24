@@ -974,7 +974,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
 TAILORING RULES — follow all of these:
 1. Coverage target: your proposed changes must collectively inject at least 85% of the job's important keywords into the resume. Review the job description carefully and identify every significant keyword, skill, tool, methodology, and requirement. Rewrite bullets and the summary to naturally incorporate them.
 2. Rewrite every experience bullet that can be made more relevant — do not leave relevant bullets unchanged when they could be keyword-enriched.
-3. Rewrite the summary to mirror the job's language, seniority level, and top 3-4 requirements.
+3. Rewrite the summary as 2–3 complete narrative sentences that communicate the candidate's value proposition, years of experience, key domains, and top 2–3 job requirements. Write as prose — do NOT use comma-separated skill lists inside the summary (e.g. avoid "Skilled in X, Y, Z, A, B, C" patterns).
 4. Add or rewrite Skills entries to match the job's technology/tool requirements that the candidate demonstrably has.
 5. Every job requirement should map to at least one "proposed" change. If no existing bullet covers a requirement, create a new "confirm" bullet the candidate can accept or edit.
 6. matchScore MUST reflect the score AFTER all changes are accepted — not the current score. Calculate it by estimating what percentage of the job's key requirements your proposed text covers.
