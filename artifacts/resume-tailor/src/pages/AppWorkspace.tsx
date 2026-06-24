@@ -3408,6 +3408,29 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
         }
       }
 
+    } else if (sec.includes("project")) {
+      if (isInsertion) {
+        const projHint = sec.replace(/^projects?\s*[-–—:]\s*/i, "").trim().toLowerCase();
+        const target = projHint
+          ? (result.projects ?? []).find(p => p.name.toLowerCase().includes(projHint) || projHint.includes(p.name.toLowerCase())) ?? result.projects?.[0]
+          : result.projects?.[0];
+        if (target) {
+          target.bullets = [...(target.bullets ?? []), finalText];
+        } else {
+          const projName = sec.replace(/^projects?\s*[-–—:]\s*/i, "").trim() || "New Project";
+          result.projects = [...(result.projects ?? []), { name: projName, bullets: [finalText] }];
+        }
+      } else {
+        const normalOrig = (row.original ?? "").trim().toLowerCase();
+        for (const proj of result.projects ?? []) {
+          const bulletIdx = proj.bullets?.findIndex(b => b.trim().toLowerCase() === normalOrig);
+          if (bulletIdx !== undefined && bulletIdx >= 0) {
+            proj.bullets![bulletIdx] = finalText;
+            break;
+          }
+        }
+      }
+
     } else if (sec.includes("education")) {
       if (isInsertion) {
         result.education!.push({ degree: finalText, school: "", year: "" });
