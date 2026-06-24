@@ -2731,14 +2731,16 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
   const jobStatesRef = useRef(jobStates);
   useEffect(() => { jobStatesRef.current = jobStates; }, [jobStates]);
 
-  // On tab/app return (visibilitychange), auto-retry any job that failed or was
+  // On tab/app return (visibilitychange), auto-retry any job that errored or was
   // interrupted mid-stream (iOS Safari throws "Load failed" when backgrounded).
+  // Only retry "error" — not "loading" — to prevent double credit charges when
+  // the user switches tabs while a tailor request is still in-flight.
   useEffect(() => {
     const handleVisible = () => {
       if (document.visibilityState !== "visible") return;
       selectedJobs.forEach(job => {
         const st = jobStatesRef.current[job.id];
-        if (st?.status === "error" || st?.status === "loading") {
+        if (st?.status === "error") {
           tailoringStarted.current.delete(job.id);
           setJobStates(prev => ({
             ...prev,
