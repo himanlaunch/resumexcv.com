@@ -949,12 +949,12 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   return `Tailor this resume for the job below. Return a JSON object with this exact shape:
 
 {
-  "matchScore": <number 0-100 — the PROJECTED keyword match AFTER the user accepts all your proposed changes. Aim for 85-95. This is not the current score; it is the score the resume will have once all rewrites are applied.>,
+  "matchScore": <number 0-100 — the REALISTIC keyword match AFTER the user accepts all your proposed changes. Be accurate and conservative: if the role requires experience the candidate does not have (e.g. active trading, specific instruments, front-office roles), reflect that in the score. Do NOT inflate to 85-95 if the honest post-tailoring match is lower.>,
   "seniorityMatch": <"perfect" | "stretch" | "overqualified">,
   "changes": [
     {
       "id": "<unique string>",
-      "section": "<section name — use exact format: 'Summary', 'Skills', 'Education', 'Certifications', or 'Experience - <Company Name>' for experience bullets>",
+      "section": "<section name — use exact format: 'Summary', 'Skills', 'Education', 'Certifications', 'Projects - <Project Name>', or 'Experience - <Company Name>' for bullets>",
       "original": "<original text from resume or '[Not in resume]'>",
       "jobReq": "<specific requirement from job description this addresses>",
       "proposed": "<final resume-ready rewrite only; no notes, reasoning, caveats, or instructions>",
@@ -966,27 +966,33 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   "skillGaps": {
     "keyword": ["<skill in resume but phrased differently>"],
     "evidence": ["<skill claimed but no example bullet>"],
-    "trueGap": ["<required skill completely absent from resume>"]
+    "trueGap": ["<required skill completely absent from resume — be specific and honest>"]
   },
   "senioritySignals": ["<list of seniority-tone suggestions, e.g. change 'I built' to 'Led team to build'>"]
 }
 
 TAILORING RULES — follow all of these:
-1. Coverage target: your proposed changes must collectively inject at least 85% of the job's important keywords into the resume. Review the job description carefully and identify every significant keyword, skill, tool, methodology, and requirement. Rewrite bullets and the summary to naturally incorporate them.
-2. Rewrite every experience bullet that can be made more relevant — do not leave relevant bullets unchanged when they could be keyword-enriched.
+1. Coverage target: identify every significant keyword and requirement in the job description. For requirements the candidate demonstrably has (from their bullets, skills, or projects), rewrite the resume to incorporate the keywords naturally. For requirements that are true gaps (no evidence in the resume), set gapType: "true_gap" and propose a "confirm" bullet — do NOT fabricate experience or overstate skills the candidate hasn't demonstrated.
+2. Rewrite every experience and project bullet that can be made more relevant — do not leave relevant bullets unchanged when they could be keyword-enriched with real experience.
 3. Rewrite the summary as 2–3 complete narrative sentences that communicate the candidate's value proposition, years of experience, key domains, and top 2–3 job requirements. Write as prose — do NOT use comma-separated skill lists inside the summary (e.g. avoid "Skilled in X, Y, Z, A, B, C" patterns).
 4. Add or rewrite Skills entries to match the job's technology/tool requirements that the candidate demonstrably has.
-5. Every job requirement should map to at least one "proposed" change. If no existing bullet covers a requirement, create a new "confirm" bullet the candidate can accept or edit.
-6. matchScore MUST reflect the score AFTER all changes are accepted — not the current score. Calculate it by estimating what percentage of the job's key requirements your proposed text covers.
+5. For Skills changes, "original" must be the exact individual skill text as it appears in the resume (one skill per change row). Do NOT combine multiple skills or categories into a single "proposed" value.
+6. If the resume has a Projects section, propose bullet rewrites or new "confirm" projects that demonstrate relevant experience the candidate could add (personal projects, coursework, research).
+7. matchScore MUST be a realistic estimate — not the maximum achievable. If the role requires career-change experience the candidate lacks (e.g. active trading for a data analyst), the honest post-tailoring score may be 50-70%. Set it accurately.
 
 RESUME:
 Name: ${resume.contact?.name ?? ""}
 Phone: ${resume.contact?.phone ?? ""}
 Location: ${resume.contact?.location ?? ""}
 Summary: ${resume.summary ?? ""}
-Skills: ${resume.skills?.join(", ") ?? ""}
+Skills: ${(() => {
+  const groups = (resume.skillGroups ?? []).filter((g: { category: string; skills: string[] }) => g.category && g.skills?.length > 0);
+  if (groups.length > 0) return groups.map((g: { category: string; skills: string[] }) => `${g.category}: ${g.skills.join(", ")}`).join(" | ");
+  return resume.skills?.join(", ") ?? "";
+})()}
 Experience:
 ${resume.experience?.map((e) => `- ${e.title} at ${e.company}${e.location ? ` (${e.location})` : ""} (${e.period})\n  ${e.bullets?.join("\n  ") ?? ""}`).join("\n") ?? ""}
+${(resume.projects ?? []).length > 0 ? `Projects:\n${resume.projects!.map((p: { name: string; period?: string; bullets?: string[] }) => `- ${p.name}${p.period ? ` (${p.period})` : ""}\n  ${p.bullets?.join("\n  ") ?? ""}`).join("\n")}` : ""}
 Education: ${resume.education?.map((e) => `${e.degree} from ${e.school}${e.location ? `, ${e.location}` : ""} (${e.year})`).join("; ") ?? ""}
 Certifications: ${resume.certifications?.join(", ") ?? ""}
 Achievements: ${resume.achievements?.join(" | ") ?? ""}
