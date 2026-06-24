@@ -404,13 +404,23 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
               const isDeleting = deletingVersionId === version.id;
               const savedDate = new Date(version.savedAt);
               const dateStr = savedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: savedDate.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined });
+              const applyLink = version.job && "applyLink" in version.job ? version.job.applyLink : null;
               return (
                 <div key={version.id} className="card-base rounded-2xl overflow-hidden">
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <div className="min-w-0">
                         <p className="font-semibold text-sm truncate" style={{ color: "#0A0A0A" }}>{version.name}</p>
-                        <p className="text-xs mt-0.5" style={{ color: "#888" }}>{version.jobTitle} @ {version.jobCompany} &middot; {dateStr}</p>
+                        {applyLink ? (
+                          <a href={applyLink} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs mt-0.5 hover:underline"
+                            style={{ color: "#00c447" }}>
+                            {version.jobTitle} @ {version.jobCompany} &middot; {dateStr}
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                          </a>
+                        ) : (
+                          <p className="text-xs mt-0.5" style={{ color: "#888" }}>{version.jobTitle} @ {version.jobCompany} &middot; {dateStr}</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
