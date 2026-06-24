@@ -143,8 +143,13 @@ export function sanitizeResumeText(value: string | null | undefined): string {
 }
 
 export function sanitizeResumeSkillText(value: string | null | undefined): string[] {
-  const text = normalizeText(value ?? "");
+  let text = normalizeText(value ?? "");
   if (!text) return [];
+
+  // Split on ". CategoryName:" patterns — AI sometimes uses periods to separate skill category blocks
+  // e.g. "SOPs. Databases & Warehouses: SQL" should become two separate entries
+  // Restrict to: period + space + Capital + letters/spaces/& + colon (avoids "Node.js", "v1.0", etc.)
+  text = text.replace(/\.\s+(?=[A-Z][a-zA-Z& ]{2,39}:)/g, "\n");
 
   return text
     .split(/\s*(?:,|;|•|\n)\s*/)

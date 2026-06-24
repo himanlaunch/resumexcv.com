@@ -3266,7 +3266,8 @@ function resolveSkillGroups(resume: ResumeData): { category: string; skills: str
   }
 
   // No explicit groups — try to parse "Category: skill1, skill2" patterns from flat list
-  const catRe = /^([A-Za-z][^:]{2,39}):\s*(.+)$/;
+  // Exclude periods from category names to avoid matching corruption like "SOPs. Databases & Warehouses: ..."
+  const catRe = /^([A-Za-z][^:.]{2,39}):\s*(.+)$/;
   const derived: { category: string; skills: string[] }[] = [];
   let cur: { category: string; skills: string[] } | null = null;
   const preItems: string[] = [];
@@ -3366,10 +3367,26 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
       const finalSkills = sanitizeResumeSkillText(rawText);
       if (finalSkills.length === 0) continue;
       const normalOrig = (row.original ?? "").trim().toLowerCase();
+      const hasGroups = result.skillGroups && result.skillGroups.length > 0;
       if (isInsertion) {
         for (const skill of finalSkills) {
           if (!result.skills!.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())) {
             result.skills!.push(skill);
+          }
+        }
+        if (hasGroups) {
+          for (const skill of finalSkills) {
+            const alreadyInGroup = result.skillGroups!.some(g =>
+              g.skills.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())
+            );
+            if (!alreadyInGroup) {
+              let addlGrp = result.skillGroups!.find(g => g.category === "Additional Skills");
+              if (!addlGrp) {
+                addlGrp = { category: "Additional Skills", skills: [] };
+                result.skillGroups!.push(addlGrp);
+              }
+              addlGrp.skills.push(skill);
+            }
           }
         }
       } else {
@@ -3380,6 +3397,32 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
           for (const skill of finalSkills) {
             if (!result.skills!.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())) {
               result.skills!.push(skill);
+            }
+          }
+        }
+        if (hasGroups) {
+          let foundInGroup = false;
+          for (const grp of result.skillGroups!) {
+            const gIdx = grp.skills.findIndex(s => s.trim().toLowerCase() === normalOrig);
+            if (gIdx >= 0) {
+              grp.skills.splice(gIdx, 1, ...finalSkills);
+              foundInGroup = true;
+              break;
+            }
+          }
+          if (!foundInGroup) {
+            for (const skill of finalSkills) {
+              const alreadyInGroup = result.skillGroups!.some(g =>
+                g.skills.some(s => s.trim().toLowerCase() === skill.trim().toLowerCase())
+              );
+              if (!alreadyInGroup) {
+                let addlGrp = result.skillGroups!.find(g => g.category === "Additional Skills");
+                if (!addlGrp) {
+                  addlGrp = { category: "Additional Skills", skills: [] };
+                  result.skillGroups!.push(addlGrp);
+                }
+                addlGrp.skills.push(skill);
+              }
             }
           }
         }
