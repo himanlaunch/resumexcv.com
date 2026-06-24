@@ -3818,7 +3818,7 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
     sectionHead("Education");
     for (const edu of sortByDateDesc(resume.education!)) {
       bp(12);
-      // "Degree, School, Location" all bold on left | Year on right (matches reference format)
+      // Degree, School bold | Location gray (same pattern as experience)
       const yearText = pdfSafeText(edu.year ?? "");
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(9.5);
@@ -3826,18 +3826,41 @@ async function handlePdfDownload(resume: ResumeData, job: JobResult) {
       pdf.text(yearText, pageW - mR, y, { align: "right" });
       const yearW = pdf.getTextWidth(yearText);
 
-      const degSchool = pdfSafeText([edu.degree, edu.school, edu.location].filter(Boolean).join(", "));
+      const degSchoolStr = pdfSafeText([edu.degree, edu.school].filter(Boolean).join(", "));
+      const eduLocStr = edu.location ? pdfSafeText(edu.location) : "";
+      const maxEduW = textW - yearW - 4;
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10.5);
       setColor(10, 10, 10);
-      const maxEduW = textW - yearW - 4;
-      const eduWrapped = pdf.splitTextToSize(degSchool, maxEduW);
-      pdf.text(eduWrapped[0], mL, y);
-      y += 4.8;
-      for (let i = 1; i < eduWrapped.length; i++) {
-        bp(4.8);
-        pdf.text(eduWrapped[i], mL, y);
+
+      if (pdf.getTextWidth(degSchoolStr + (eduLocStr ? `, ${eduLocStr}` : "")) <= maxEduW) {
+        // Fits on one line — degree+school bold, location gray inline
+        pdf.text(degSchoolStr, mL, y);
+        if (eduLocStr) {
+          const dsW = pdf.getTextWidth(degSchoolStr);
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
+          setColor(70, 70, 70);
+          pdf.text(`, ${eduLocStr}`, mL + dsW, y);
+        }
         y += 4.8;
+      } else {
+        // Degree+school on line 1 (bold), location on its own gray line
+        const eduWrapped = pdf.splitTextToSize(degSchoolStr, maxEduW);
+        pdf.text(eduWrapped[0], mL, y);
+        y += 4.8;
+        for (let i = 1; i < eduWrapped.length; i++) {
+          bp(4.8);
+          pdf.text(eduWrapped[i], mL, y);
+          y += 4.8;
+        }
+        if (eduLocStr) {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(9.5);
+          setColor(90, 90, 90);
+          pdf.text(eduLocStr, mL, y);
+          y += 4.5;
+        }
       }
 
       if (edu.notes) {
@@ -4041,11 +4064,13 @@ async function buildDocxBlob(resume: ResumeData, job: JobResult): Promise<Blob> 
   if ((resume.education ?? []).length > 0) {
     children.push(sectionHeading("Education"));
     for (const edu of sortByDateDesc(resume.education!)) {
-      // "Degree, School, Location" all bold | Year right — matches reference format
-      const degSchoolLocDocx = [edu.degree, edu.school, edu.location].filter(Boolean).join(", ");
+      // Degree, School bold | Location gray | Year right
+      const degSchoolDocx = [edu.degree, edu.school].filter(Boolean).join(", ");
+      const eduLocDocx = edu.location ?? "";
       children.push(new Paragraph({
         children: [
-          new TextRun({ text: degSchoolLocDocx, bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
+          new TextRun({ text: degSchoolDocx, bold: true, size: 22, font: "Calibri", color: "0A0A0A" }),
+          ...(eduLocDocx ? [new TextRun({ text: `, ${eduLocDocx}`, size: 22, font: "Calibri", color: "444444" })] : []),
           new TextRun({ text: "\t" }),
           new TextRun({ text: edu.year ?? "", size: 20, font: "Calibri", color: "555555" }),
         ],
