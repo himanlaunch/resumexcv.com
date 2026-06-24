@@ -25,7 +25,7 @@ import { GapSuggestionPanel } from "@/components/GapSuggestionPanel";
 import { upsertCampaignFromJob, updateCampaignStatus, loadCampaigns, type CampaignStatus } from "@/lib/campaigns";
 import { sanitizeDiffChange, sanitizeResumeForExport, sanitizeResumeSkillText, sanitizeResumeText } from "@/lib/resumeSafety";
 
-type Step = 1 | 3 | 4 | 5 | 6;
+type Step = 1 | 3 | 4 | 5;
 
 // ── localStorage persistence ───────────────────────────────────────────────────
 
@@ -216,7 +216,7 @@ function companyColor(company: string) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
-function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits }: { step: Step; setStep: (s: Step) => void; completedSteps: Set<Step>; resume: ResumeData; credits: CreditBalance | null; onBuyCredits: () => void }) {
+function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits, showMyResumes, onShowMyResumes }: { step: Step; setStep: (s: Step) => void; completedSteps: Set<Step>; resume: ResumeData; credits: CreditBalance | null; onBuyCredits: () => void; showMyResumes: boolean; onShowMyResumes: () => void }) {
   const { user, signOut } = useAuth();
   const displayEmail = user?.email ?? "Signed in";
   const metadataName = [user?.user_metadata?.full_name, user?.user_metadata?.name]
@@ -256,11 +256,11 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits 
       </nav>
       <div className="px-4 py-4 border-t" style={{ borderColor: "#1E1E1E" }}>
         <button
-          onClick={() => setStep(6)}
+          onClick={() => onShowMyResumes()}
           className="w-full flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors text-left"
-          style={{ color: step === 6 ? "#00F0A0" : "#B8C0C8", backgroundColor: step === 6 ? "rgba(0,240,160,0.08)" : "transparent" }}
-          onMouseEnter={e => { if (step !== 6) { e.currentTarget.style.color = "#00F0A0"; e.currentTarget.style.backgroundColor = "rgba(0,240,160,0.06)"; } }}
-          onMouseLeave={e => { if (step !== 6) { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; } }}
+          style={{ color: showMyResumes ? "#00F0A0" : "#B8C0C8", backgroundColor: showMyResumes ? "rgba(0,240,160,0.08)" : "transparent" }}
+          onMouseEnter={e => { if (!showMyResumes) { e.currentTarget.style.color = "#00F0A0"; e.currentTarget.style.backgroundColor = "rgba(0,240,160,0.06)"; } }}
+          onMouseLeave={e => { if (!showMyResumes) { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; } }}
         >
           <BookmarkCheck className="w-4 h-4" /><span>My Resumes</span>
         </button>
@@ -5030,6 +5030,7 @@ export default function AppWorkspace() {
   const storageScope = user?.id ?? ANONYMOUS_STORAGE_SCOPE;
   const [savedData, setSavedData] = useState<SavedResumeData | null>(() => loadSaved());
   const [step, setStep] = useState<Step>(1);
+  const [showMyResumes, setShowMyResumes] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Set<Step>>(new Set());
   const [searchTitles, setSearchTitles] = useState<string[]>(["Staff Software Engineer", "Senior Software Engineer", "Backend Engineer"]);
   const [searchLocations, setSearchLocations] = useState<string[]>(["Remote (US)"]);
@@ -5135,10 +5136,12 @@ export default function AppWorkspace() {
     }
   }, [refreshCredits]);
 
-  const goTo = (n: Step) => {
+  const navigateTo = (n: Step) => {
+    setShowMyResumes(false);
     setCompletedSteps(prev => { const s = new Set(prev); s.add(step); return s; });
     setStep(n);
   };
+  const goTo = navigateTo;
 
   const handleJobsReady = useCallback(async (jobs: JobResult[]) => {
     setCreditSkipNotice("");
@@ -5227,7 +5230,7 @@ export default function AppWorkspace() {
 
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: "#F2F4F5" }}>
-      <Sidebar step={step} setStep={setStep} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} />
+      <Sidebar step={step} setStep={navigateTo} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} showMyResumes={showMyResumes} onShowMyResumes={() => setShowMyResumes(true)} />
       <main className="flex-1 min-h-screen overflow-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
         {/* Promo banner for signed-out users */}
         {!user && !authLoading && (
@@ -5247,51 +5250,54 @@ export default function AppWorkspace() {
             </Link>
           </div>
         )}
-        {step === 1 && (
-          <Step1Vault key={savedData?.fileName ?? user?.id ?? "local-vault"} resume={resume} savedData={savedData} savedVersions={savedVersions} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} onParsed={handleParsed} onClear={handleClear} onDeleteVersion={handleDeleteVersion} onDirectJobs={(jobs) => { void handleJobsReady(jobs); }} onUpdateResume={handleUpdateResume} onNext={(titles, locations) => {
-            setSearchTitles(titles);
-            setSearchLocations(locations);
-            setDiscoverySearchRun(n => n + 1);
-            goTo(3);
-          }} />
-        )}
-        {step === 3 && (
-          <Step3Discovery titles={searchTitles} location={searchLocations.join("|")} resume={resume} autoSearchRun={discoverySearchRun}
-            onNext={(jobs) => { void handleJobsReady(jobs); }} />
-        )}
-        {step === 4 && (
-          !user
-            ? (
-              <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center max-w-sm">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: "#ECFFE0" }}>
-                    <Zap className="w-8 h-8" style={{ color: "#00c447" }} />
-                  </div>
-                  <h2 className="font-heading font-bold text-xl mb-2" style={{ color: "#0A0A0A" }}>Sign in to tailor your resume</h2>
-                  <p className="text-sm mb-1" style={{ color: "#666" }}>
-                    Create a free account and get <strong>10 resume credits</strong> — enough to tailor 10 jobs.
-                  </p>
-                  <p className="text-xs mb-6" style={{ color: "#9CA3AF" }}>No credit card required. Limited promo offer.</p>
-                  <Link href="/signin" className="btn-mint inline-flex items-center gap-2">
-                    Sign in &amp; claim 10 free credits <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              </div>
-            )
-            : selectedJobs.length === 0
-              ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => setStep(3)} />
-              : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} user={user} onAutoSave={handleSaveVersion} onUpdateResume={handleUpdateResume} />
-        )}
-        {step === 5 && (
-          selectedJobs.length === 0
-            ? <NoDataGuard message="No tailored resumes yet." action="Start from Job Discovery" onAction={() => setStep(3)} />
-            : <Step5Export selectedJobs={selectedJobs} resume={resume} jobDiffs={jobDiffs} savedVersionIds={savedVersionIds} onSaveVersion={handleSaveVersion} />
-        )}
-        {step === 6 && (
+        {showMyResumes ? (
           <MyResumesPage savedVersions={savedVersions} onDeleteVersion={handleDeleteVersion} />
+        ) : (
+          <>
+            {step === 1 && (
+              <Step1Vault key={savedData?.fileName ?? user?.id ?? "local-vault"} resume={resume} savedData={savedData} savedVersions={savedVersions} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} onParsed={handleParsed} onClear={handleClear} onDeleteVersion={handleDeleteVersion} onDirectJobs={(jobs) => { void handleJobsReady(jobs); }} onUpdateResume={handleUpdateResume} onNext={(titles, locations) => {
+                setSearchTitles(titles);
+                setSearchLocations(locations);
+                setDiscoverySearchRun(n => n + 1);
+                goTo(3);
+              }} />
+            )}
+            {step === 3 && (
+              <Step3Discovery titles={searchTitles} location={searchLocations.join("|")} resume={resume} autoSearchRun={discoverySearchRun}
+                onNext={(jobs) => { void handleJobsReady(jobs); }} />
+            )}
+            {step === 4 && (
+              !user
+                ? (
+                  <div className="flex-1 flex items-center justify-center p-8">
+                    <div className="text-center max-w-sm">
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: "#ECFFE0" }}>
+                        <Zap className="w-8 h-8" style={{ color: "#00c447" }} />
+                      </div>
+                      <h2 className="font-heading font-bold text-xl mb-2" style={{ color: "#0A0A0A" }}>Sign in to tailor your resume</h2>
+                      <p className="text-sm mb-1" style={{ color: "#666" }}>
+                        Create a free account and get <strong>10 resume credits</strong> — enough to tailor 10 jobs.
+                      </p>
+                      <p className="text-xs mb-6" style={{ color: "#9CA3AF" }}>No credit card required. Limited promo offer.</p>
+                      <Link href="/signin" className="btn-mint inline-flex items-center gap-2">
+                        Sign in &amp; claim 10 free credits <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </div>
+                  </div>
+                )
+                : selectedJobs.length === 0
+                  ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => navigateTo(3)} />
+                  : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} user={user} onAutoSave={handleSaveVersion} onUpdateResume={handleUpdateResume} />
+            )}
+            {step === 5 && (
+              selectedJobs.length === 0
+                ? <NoDataGuard message="No tailored resumes yet." action="Start from Job Discovery" onAction={() => navigateTo(3)} />
+                : <Step5Export selectedJobs={selectedJobs} resume={resume} jobDiffs={jobDiffs} savedVersionIds={savedVersionIds} onSaveVersion={handleSaveVersion} />
+            )}
+          </>
         )}
       </main>
-      <MobileBottomNav step={step} setStep={setStep} completedSteps={completedSteps} />
+      <MobileBottomNav step={step} setStep={navigateTo} completedSteps={completedSteps} />
       <BuyCreditsModal open={buyCreditsOpen} onClose={() => setBuyCreditsOpen(false)} credits={creditBalance} onCreditsUpdated={refreshCredits} />
     </div>
   );
