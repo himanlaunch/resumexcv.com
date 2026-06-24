@@ -958,7 +958,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   "changes": [
     {
       "id": "<unique string>",
-      "section": "<section name — use exact format: 'Summary', 'Skills', 'Education', 'Certifications', or 'Experience - <Company Name>' for experience bullets>",
+      "section": "<section name — use exact format: 'Summary', 'Skills', 'Education', 'Certifications', 'Projects - <Project Name>', or 'Experience - <Company Name>' for bullets>",
       "original": "<original text from resume or '[Not in resume]'>",
       "jobReq": "<specific requirement from job description this addresses>",
       "proposed": "<final resume-ready rewrite only; no notes, reasoning, caveats, or instructions>",
@@ -995,6 +995,7 @@ Skills: ${(() => {
 })()}
 Experience:
 ${resume.experience?.map((e) => `- ${e.title} at ${e.company}${e.location ? ` (${e.location})` : ""} (${e.period})\n  ${e.bullets?.join("\n  ") ?? ""}`).join("\n") ?? ""}
+${(resume.projects ?? []).length > 0 ? `Projects:\n${(resume.projects ?? []).map((p) => `- ${p.name}${p.period ? ` (${p.period})` : ""}\n  ${(p.bullets ?? []).join("\n  ")}`).join("\n")}` : ""}
 Education: ${resume.education?.map((e) => `${e.degree} from ${e.school}${e.location ? `, ${e.location}` : ""} (${e.year})`).join("; ") ?? ""}
 Certifications: ${resume.certifications?.join(", ") ?? ""}
 Achievements: ${resume.achievements?.join(" | ") ?? ""}
