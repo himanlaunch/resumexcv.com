@@ -13,7 +13,7 @@ import {
   type TailoringResult, type ATSCheck,
   searchJobs, tailorResume, retryChange, generateCoverLetter, parseResume,
   shareResume, fetchJobFromUrl, scrapeJobDescription,
-  getBillingPrices, getCreditBalance, createCheckout,
+  getBillingPrices, getCreditBalance, createCheckout, fulfillCheckoutSession,
   getSavedProfile, saveProfile, clearSavedProfile,
   getGeneratedResumes, saveGeneratedResume, deleteGeneratedResume,
   autocompleteRole, autocompleteLocation,
@@ -4867,8 +4867,16 @@ export default function AppWorkspace() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("checkout") === "success") {
-      void refreshCredits();
       window.history.replaceState({}, "", window.location.pathname);
+      const sessionId = params.get("session_id") ?? "";
+      if (sessionId.startsWith("cs_")) {
+        // Fulfill directly via Stripe API — doesn't depend on webhook timing
+        fulfillCheckoutSession(sessionId)
+          .catch(() => {})
+          .finally(() => { void refreshCredits(); });
+      } else {
+        void refreshCredits();
+      }
     }
   }, [refreshCredits]);
 

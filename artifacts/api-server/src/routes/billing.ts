@@ -216,6 +216,50 @@ router.post("/checkout", async (req, res) => {
   }
 });
 
+// POST /api/billing/fulfill-session
+// Called by the frontend when the user returns from Stripe with ?checkout=success&session_id=...
+// This is a webhook-independent fallback: fetches the session directly from Stripe and fulfills
+// credits if payment was successful. Safe to call multiple times (idempotent via ON CONFLICT).
+router.post("/fulfill-session", async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: "Stripe is not configured." });
+
+  const user = await getSupabaseUser(req);
+  if (!user) return res.status(401).json({ error: "Sign in to claim credits." });
+
+  const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+  if (!sessionId.startsWith("cs_")) {
+    return res.status(400).json({ error: "Invalid session ID." });
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    // Security: verify this session belongs to the requesting user
+    const sessionUserId = session.metadata?.userId ?? session.client_reference_id;
+    if (sessionUserId !== user.id) {
+      return res.status(403).json({ error: "Session does not belong to signed-in user." });
+    }
+
+    if (session.payment_status !== "paid") {
+      return res.status(402).json({ error: "Payment not completed yet." });
+    }
+
+    const priceId = session.metadata?.priceId ?? sessionId;
+    const credits = Number(session.metadata?.credits ?? 0);
+
+    if (!Number.isFinite(credits) || credits <= 0) {
+      return res.status(400).json({ error: "Could not determine credits from session." });
+    }
+
+    await fulfillCheckout(sessionId, user.id, priceId, credits);
+    const balance = await getCredits(user.id);
+    return res.json({ ok: true, ...balance });
+  } catch (err) {
+    logger.error({ err, sessionId, userId: user.id }, "Fulfill session failed");
+    return res.status(500).json({ error: "Could not fulfill session." });
+  }
+});
+
 router.post("/webhook", async (req, res) => {
   if (!stripe) return res.status(503).json({ error: "Stripe is not configured." });
 

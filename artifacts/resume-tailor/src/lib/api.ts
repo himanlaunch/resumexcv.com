@@ -151,6 +151,19 @@ export async function createCheckout(priceId: string): Promise<{ url: string }> 
   return res.json();
 }
 
+export async function fulfillCheckoutSession(sessionId: string): Promise<CreditBalance> {
+  const res = await fetch(`${API_BASE}/billing/fulfill-session`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? "Could not fulfill session");
+  }
+  return res.json();
+}
+
 export async function getSavedProfile(): Promise<SavedResumeProfile | null> {
   const res = await fetch(`${API_BASE}/profile/vault`, {
     headers: authHeaders(),
