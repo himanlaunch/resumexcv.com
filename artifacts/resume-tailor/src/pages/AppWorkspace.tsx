@@ -1414,9 +1414,6 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
   );
   const [customTitleInput, setCustomTitleInput] = useState("");
   const [roleSuggestionsOpen, setRoleSuggestionsOpen] = useState(false);
-  const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
-  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
-  const [downloadingVersion, setDownloadingVersion] = useState<{ id: string; format: "pdf" | "docx" } | null>(null);
   const [reviewing, setReviewing] = useState<{ resume: ResumeData; recommendations: ParsedResumeResult["recommendations"]; fileName: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1520,32 +1517,6 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     setCustomTitleInput("");
     setRoleSuggestionsOpen(false);
   };
-  const savedVersionJob = (version: SavedVersion): JobResult => ({
-    id: version.sourceJobId ?? version.id,
-    title: version.jobTitle,
-    company: version.jobCompany,
-    location: version.job?.location ?? "",
-    via: "Saved resume",
-    description: version.job?.description ?? "",
-    highlights: version.job?.highlights ?? [],
-    postedAt: "",
-    salary: null,
-    remote: false,
-    scheduleType: "",
-    applyLink: version.job && "applyLink" in version.job ? version.job.applyLink ?? null : null,
-    source: "custom",
-  });
-  const downloadSavedVersion = async (version: SavedVersion, format: "pdf" | "docx") => {
-    setDownloadingVersion({ id: version.id, format });
-    try {
-      const job = savedVersionJob(version);
-      if (format === "pdf") await handlePdfDownload(version.resume, job);
-      else await handleDocxDownload(version.resume, job);
-    } finally {
-      setDownloadingVersion(null);
-    }
-  };
-
   if (reviewing) {
     return (
       <ParsedResumeReview
@@ -1791,86 +1762,6 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
           </div>
         )}
 
-        {savedVersions.length > 0 && (
-          <div className="mt-10">
-            <div className="flex items-center gap-2 mb-4">
-              <BookmarkCheck className="w-5 h-5" style={{ color: "#00c447" }} />
-              <h2 className="font-heading font-bold text-lg" style={{ color: "#0A0A0A" }}>My Resumes</h2>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#ECFFE0", color: "#005A3D" }}>{savedVersions.length}</span>
-            </div>
-            <div className="grid md:grid-cols-2 gap-3">
-              {savedVersions.map(version => {
-                const isPreviewing = previewingVersionId === version.id;
-                const isDeleting = deletingVersionId === version.id;
-                const savedDate = new Date(version.savedAt);
-                const dateStr = savedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: savedDate.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined });
-                return (
-                  <div key={version.id} className="card-base rounded-2xl overflow-hidden">
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-sm truncate" style={{ color: "#0A0A0A" }}>{version.name}</p>
-                          <p className="text-xs mt-0.5" style={{ color: "#888" }}>{version.jobTitle} @ {version.jobCompany} · {dateStr}</p>
-                        </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <button
-                            onClick={() => { void downloadSavedVersion(version, "docx"); }}
-                            disabled={downloadingVersion?.id === version.id}
-                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
-                            title="Download DOCX"
-                            style={{ backgroundColor: "#ECFFE0", color: "#005A3D", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
-                          >
-                            {downloadingVersion?.id === version.id && downloadingVersion.format === "docx" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                            DOCX
-                          </button>
-                          <button
-                            onClick={() => { void downloadSavedVersion(version, "pdf"); }}
-                            disabled={downloadingVersion?.id === version.id}
-                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
-                            title="Download PDF"
-                            style={{ backgroundColor: "#F0F0F0", color: "#444", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
-                          >
-                            {downloadingVersion?.id === version.id && downloadingVersion.format === "pdf" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                            PDF
-                          </button>
-                          <button
-                            onClick={() => setPreviewingVersionId(isPreviewing ? null : version.id)}
-                            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
-                            style={{ backgroundColor: isPreviewing ? "#0A0A0A" : "#F0F0F0", color: isPreviewing ? "#fff" : "#444" }}
-                          >
-                            {isPreviewing ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            {isPreviewing ? "Hide" : "View"}
-                          </button>
-                          {isDeleting ? (
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => { onDeleteVersion(version.id); setDeletingVersionId(null); if (isPreviewing) setPreviewingVersionId(null); }}
-                                className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}>Delete</button>
-                              <button onClick={() => setDeletingVersionId(null)} className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>Cancel</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setDeletingVersionId(version.id)} className="p-1.5 rounded-full transition-all"
-                              style={{ color: "#CCC" }}
-                              onMouseEnter={e => { e.currentTarget.style.color = "#EF4444"; e.currentTarget.style.backgroundColor = "#FEE2E2"; }}
-                              onMouseLeave={e => { e.currentTarget.style.color = "#CCC"; e.currentTarget.style.backgroundColor = "transparent"; }}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {isPreviewing && (
-                      <div style={{ borderTop: "1px solid #F0F0F0", padding: "0 16px 16px" }}>
-                        <div style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)", borderRadius: 8, marginTop: 12 }}>
-                          <ResumePreview resume={version.resume} jobTitle={version.jobTitle} jobCompany={version.jobCompany} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
