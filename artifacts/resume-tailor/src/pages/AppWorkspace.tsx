@@ -25,7 +25,7 @@ import { GapSuggestionPanel } from "@/components/GapSuggestionPanel";
 import { upsertCampaignFromJob, updateCampaignStatus, loadCampaigns, type CampaignStatus } from "@/lib/campaigns";
 import { sanitizeDiffChange, sanitizeResumeForExport, sanitizeResumeSkillText, sanitizeResumeText } from "@/lib/resumeSafety";
 
-type Step = 1 | 3 | 4 | 5;
+type Step = 1 | 3 | 4 | 5 | 6;
 
 // ── localStorage persistence ───────────────────────────────────────────────────
 
@@ -255,13 +255,15 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits 
         })}
       </nav>
       <div className="px-4 py-4 border-t" style={{ borderColor: "#1E1E1E" }}>
-        <Link href="/campaigns" className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors"
-          style={{ color: "#B8C0C8" }}
-          onMouseEnter={e => { e.currentTarget.style.color = "#00F0A0"; e.currentTarget.style.backgroundColor = "rgba(0,240,160,0.06)"; }}
-          onMouseLeave={e => { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; }}
+        <button
+          onClick={() => setStep(6)}
+          className="w-full flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors text-left"
+          style={{ color: step === 6 ? "#00F0A0" : "#B8C0C8", backgroundColor: step === 6 ? "rgba(0,240,160,0.08)" : "transparent" }}
+          onMouseEnter={e => { if (step !== 6) { e.currentTarget.style.color = "#00F0A0"; e.currentTarget.style.backgroundColor = "rgba(0,240,160,0.06)"; } }}
+          onMouseLeave={e => { if (step !== 6) { e.currentTarget.style.color = "#B8C0C8"; e.currentTarget.style.backgroundColor = "transparent"; } }}
         >
-          <Briefcase className="w-4 h-4" />Campaign Tracker
-        </Link>
+          <BookmarkCheck className="w-4 h-4" /><span>My Resumes</span>
+        </button>
 
         {!user ? (
           /* ── Promo sign-in block for signed-out users ── */
@@ -310,6 +312,166 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits 
         )}
       </div>
     </aside>
+  );
+}
+
+function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: SavedVersion[]; onDeleteVersion: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [downloadingVersion, setDownloadingVersion] = useState<{ id: string; format: "pdf" | "docx" } | null>(null);
+  const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
+  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
+
+  const makeJob = (version: SavedVersion): JobResult => ({
+    id: version.sourceJobId ?? version.id,
+    title: version.jobTitle,
+    company: version.jobCompany,
+    location: version.job?.location ?? "",
+    via: "Saved resume",
+    description: version.job?.description ?? "",
+    highlights: version.job?.highlights ?? [],
+    postedAt: "",
+    salary: null,
+    remote: false,
+    scheduleType: "",
+    applyLink: version.job && "applyLink" in version.job ? version.job.applyLink ?? null : null,
+    source: "custom",
+  });
+
+  const download = async (version: SavedVersion, format: "pdf" | "docx") => {
+    setDownloadingVersion({ id: version.id, format });
+    try {
+      const job = makeJob(version);
+      if (format === "pdf") await handlePdfDownload(version.resume, job);
+      else await handleDocxDownload(version.resume, job);
+    } finally {
+      setDownloadingVersion(null);
+    }
+  };
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? savedVersions.filter(v =>
+        v.name.toLowerCase().includes(q) ||
+        v.jobTitle.toLowerCase().includes(q) ||
+        v.jobCompany.toLowerCase().includes(q)
+      )
+    : savedVersions;
+
+  return (
+    <div className="flex-1 p-3 sm:p-4 md:p-8 overflow-auto">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-1">
+            <BookmarkCheck className="w-6 h-6" style={{ color: "#00c447" }} />
+            <h1 className="font-heading font-bold text-2xl md:text-3xl" style={{ color: "#0A0A0A" }}>My Resumes</h1>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#ECFFE0", color: "#005A3D" }}>{savedVersions.length}</span>
+          </div>
+          <p className="text-sm" style={{ color: "#666" }}>All your tailored resumes. Search by name, job title, or company.</p>
+        </div>
+
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
+          <input
+            type="text"
+            placeholder="Search resumes..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="w-full pl-9 pr-9 py-2.5 rounded-xl text-sm outline-none"
+            style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB", color: "#0A0A0A" }}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#9CA3AF" }}>
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {savedVersions.length === 0 ? (
+          <div className="text-center py-16">
+            <BookmarkCheck className="w-12 h-12 mx-auto mb-4" style={{ color: "#D1D5DB" }} />
+            <p className="font-semibold text-base" style={{ color: "#6B7280" }}>No saved resumes yet</p>
+            <p className="text-sm mt-1" style={{ color: "#9CA3AF" }}>Tailor a resume to a job and it will appear here.</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <Search className="w-10 h-10 mx-auto mb-3" style={{ color: "#D1D5DB" }} />
+            <p className="font-semibold text-base" style={{ color: "#6B7280" }}>No results for &ldquo;{query}&rdquo;</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-3">
+            {filtered.map(version => {
+              const isPreviewing = previewingVersionId === version.id;
+              const isDeleting = deletingVersionId === version.id;
+              const savedDate = new Date(version.savedAt);
+              const dateStr = savedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: savedDate.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined });
+              return (
+                <div key={version.id} className="card-base rounded-2xl overflow-hidden">
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate" style={{ color: "#0A0A0A" }}>{version.name}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "#888" }}>{version.jobTitle} @ {version.jobCompany} &middot; {dateStr}</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => { void download(version, "docx"); }}
+                          disabled={downloadingVersion?.id === version.id}
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          title="Download DOCX"
+                          style={{ backgroundColor: "#ECFFE0", color: "#005A3D", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
+                        >
+                          {downloadingVersion?.id === version.id && downloadingVersion.format === "docx" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                          DOCX
+                        </button>
+                        <button
+                          onClick={() => { void download(version, "pdf"); }}
+                          disabled={downloadingVersion?.id === version.id}
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          title="Download PDF"
+                          style={{ backgroundColor: "#F0F0F0", color: "#444", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
+                        >
+                          {downloadingVersion?.id === version.id && downloadingVersion.format === "pdf" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          PDF
+                        </button>
+                        <button
+                          onClick={() => setPreviewingVersionId(isPreviewing ? null : version.id)}
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          style={{ backgroundColor: isPreviewing ? "#0A0A0A" : "#F0F0F0", color: isPreviewing ? "#fff" : "#444" }}
+                        >
+                          {isPreviewing ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          {isPreviewing ? "Hide" : "View"}
+                        </button>
+                        {isDeleting ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { onDeleteVersion(version.id); setDeletingVersionId(null); if (isPreviewing) setPreviewingVersionId(null); }}
+                              className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}>Delete</button>
+                            <button onClick={() => setDeletingVersionId(null)} className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setDeletingVersionId(version.id)} className="p-1.5 rounded-full transition-all"
+                            style={{ color: "#CCC" }}
+                            onMouseEnter={e => { e.currentTarget.style.color = "#EF4444"; e.currentTarget.style.backgroundColor = "#FEE2E2"; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = "#CCC"; e.currentTarget.style.backgroundColor = "transparent"; }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {isPreviewing && (
+                    <div style={{ borderTop: "1px solid #F0F0F0", padding: "0 16px 16px" }}>
+                      <div style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)", borderRadius: 8, marginTop: 12 }}>
+                        <ResumePreview resume={version.resume} jobTitle={version.jobTitle} jobCompany={version.jobCompany} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -5124,6 +5286,9 @@ export default function AppWorkspace() {
           selectedJobs.length === 0
             ? <NoDataGuard message="No tailored resumes yet." action="Start from Job Discovery" onAction={() => setStep(3)} />
             : <Step5Export selectedJobs={selectedJobs} resume={resume} jobDiffs={jobDiffs} savedVersionIds={savedVersionIds} onSaveVersion={handleSaveVersion} />
+        )}
+        {step === 6 && (
+          <MyResumesPage savedVersions={savedVersions} onDeleteVersion={handleDeleteVersion} />
         )}
       </main>
       <MobileBottomNav step={step} setStep={setStep} completedSteps={completedSteps} />
