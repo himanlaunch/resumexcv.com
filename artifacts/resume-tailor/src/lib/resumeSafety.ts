@@ -36,12 +36,10 @@ const UNSAFE_RESUME_NOTE_PATTERNS = [
 
 function normalizeText(value: string): string {
   return value
-    // Replace em dashes (common AI writing pattern) with a comma or semicolon
-    .replace(/\s*—\s*/g, ", ")
+    // Replace em dashes with an en dash — avoids "X — Y — Z" becoming "X, Y, Z" (looks like a skills list)
+    .replace(/\s*—\s*/g, " – ")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
-    // Clean up any double commas left by the em dash replacement
-    .replace(/,\s*,/g, ",")
     .trim();
 }
 
