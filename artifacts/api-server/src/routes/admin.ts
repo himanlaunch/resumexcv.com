@@ -6,10 +6,14 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
+const ADMIN_EMAILS = [
+  "info@3llms.com",
+  "welcome@1teraton.com",
+  ...(process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+];
 
 async function requireAdmin(req, res) {
   const user = await getSupabaseUser(req);
