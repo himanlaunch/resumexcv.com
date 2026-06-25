@@ -45,6 +45,7 @@ router.get("/users", async (req, res) => {
            urp.resume->>'name' ILIKE $3
         OR urp.resume->>'email' ILIKE $3
         OR urp.resume->>'phone' ILIKE $3
+        OR au.email ILIKE $3
        )`
       : "";
 
@@ -54,6 +55,7 @@ router.get("/users", async (req, res) => {
            urp.resume->>'name' ILIKE $1
         OR urp.resume->>'email' ILIKE $1
         OR urp.resume->>'phone' ILIKE $1
+        OR au.email ILIKE $1
        )`
       : "";
 
@@ -64,7 +66,7 @@ router.get("/users", async (req, res) => {
       `SELECT
          urp.user_id,
          urp.resume->>'name'     AS name,
-         urp.resume->>'email'    AS email,
+         COALESCE(au.email, urp.resume->>'email') AS email,
          urp.resume->>'phone'    AS phone,
          urp.resume->>'location' AS location,
          urp.resume->>'summary'  AS summary,
@@ -77,6 +79,7 @@ router.get("/users", async (req, res) => {
          (SELECT COUNT(*)::int FROM user_generated_resumes ugr WHERE ugr.user_id = urp.user_id) AS generated_count
        FROM user_resume_profiles urp
        LEFT JOIN user_credits uc ON uc.user_id = urp.user_id
+       LEFT JOIN auth.users au ON au.id::text = urp.user_id
        WHERE 1=1 ${searchClause}
        ORDER BY urp.updated_at DESC
        LIMIT $1 OFFSET $2`,
@@ -85,6 +88,7 @@ router.get("/users", async (req, res) => {
 
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total FROM user_resume_profiles urp
+       LEFT JOIN auth.users au ON au.id::text = urp.user_id
        WHERE 1=1 ${countSearchClause}`,
       search ? [`%${search}%`] : [],
     );
