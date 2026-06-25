@@ -39,15 +39,25 @@ router.get("/users", async (req, res) => {
   const offset = Math.max(0, Number(req.query.offset) || 0);
 
   try {
+    // Main query: $1=limit, $2=offset, $3=search (if present)
     const searchClause = search
       ? `AND (
-           urp.resume->>'name' ILIKE $4
-        OR urp.resume->>'email' ILIKE $4
-        OR urp.resume->>'phone' ILIKE $4
+           urp.resume->>'name' ILIKE $3
+        OR urp.resume->>'email' ILIKE $3
+        OR urp.resume->>'phone' ILIKE $3
        )`
       : "";
 
-    const params: any[] = [limit, offset, ""];
+    // Count query: $1=search (if present)
+    const countSearchClause = search
+      ? `AND (
+           urp.resume->>'name' ILIKE $1
+        OR urp.resume->>'email' ILIKE $1
+        OR urp.resume->>'phone' ILIKE $1
+       )`
+      : "";
+
+    const params: any[] = [limit, offset];
     if (search) params.push(`%${search}%`);
 
     const result = await pool.query(
@@ -75,7 +85,7 @@ router.get("/users", async (req, res) => {
 
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total FROM user_resume_profiles urp
-       WHERE 1=1 ${searchClause}`,
+       WHERE 1=1 ${countSearchClause}`,
       search ? [`%${search}%`] : [],
     );
 
