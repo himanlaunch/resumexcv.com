@@ -267,10 +267,12 @@ export default function Admin() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
 
   const load = useCallback(async (q: string) => {
     setForbidden(false);
+    setLoadError(null);
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: "200", ...(q ? { search: q } : {}) });
@@ -279,8 +281,17 @@ export default function Admin() {
         fetch(`${API_BASE}/admin/stats`, { headers: authHeaders(token) }),
       ]);
       if (uRes.status === 403 || uRes.status === 401) { setForbidden(true); return; }
-      if (uRes.ok) { const d = await uRes.json(); setUsers(d.users); setTotal(d.total); }
+      if (uRes.ok) {
+        const d = await uRes.json();
+        setUsers(d.users);
+        setTotal(d.total);
+      } else {
+        const err = await uRes.json().catch(() => ({}));
+        setLoadError(`Users API error ${uRes.status}: ${(err as any).error ?? "unknown"}`);
+      }
       if (sRes.ok) setStats(await sRes.json());
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Network error");
     } finally {
       setLoading(false);
     }
@@ -360,6 +371,8 @@ export default function Admin() {
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #2A2A2A" }}>
           {loading ? (
             <div className="p-10 text-center text-sm" style={{ color: "#555" }}>Loading users…</div>
+          ) : loadError ? (
+            <div className="p-10 text-center text-sm" style={{ color: "#EF4444" }}>{loadError}</div>
           ) : users.length === 0 ? (
             <div className="p-10 text-center text-sm" style={{ color: "#555" }}>
               {search ? "No users match your search." : "No users yet."}
