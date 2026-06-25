@@ -260,7 +260,8 @@ function UserRow({ user, token, onCreditsGranted }: { user: AdminUser; token: st
 }
 
 export default function Admin() {
-  const { user, token } = useAuth() as any;
+  const { user, session, loading: authLoading } = useAuth();
+  const token = session?.access_token ?? null;
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [search, setSearch] = useState("");
@@ -269,6 +270,7 @@ export default function Admin() {
   const [total, setTotal] = useState(0);
 
   const load = useCallback(async (q: string) => {
+    setForbidden(false);
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: "200", ...(q ? { search: q } : {}) });
@@ -285,9 +287,10 @@ export default function Admin() {
   }, [token]);
 
   useEffect(() => {
+    if (authLoading || !user) return;
     const t = setTimeout(() => { void load(search); }, search ? 350 : 0);
     return () => clearTimeout(t);
-  }, [search, load]);
+  }, [search, load, authLoading, user]);
 
   if (!user) {
     return (
