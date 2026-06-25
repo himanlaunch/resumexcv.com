@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
-import { Search, Users, FileText, Briefcase, TrendingUp, ChevronDown, ChevronUp, Phone, Mail, MapPin, User, RefreshCw } from "lucide-react";
+import { Search, Users, FileText, Briefcase, TrendingUp, ChevronDown, ChevronUp, Phone, Mail, MapPin, User, RefreshCw, Zap } from "lucide-react";
 
 const API_BASE = "/api";
 
@@ -67,10 +67,13 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function UserRow({ user, token }: { user: AdminUser; token: string | null }) {
+function UserRow({ user, token, onCreditsGranted }: { user: AdminUser; token: string | null; onCreditsGranted: (userId: string, newBalance: number) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [grantAmount, setGrantAmount] = useState("1000");
+  const [granting, setGranting] = useState(false);
+  const [grantMsg, setGrantMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const loadDetail = async () => {
     if (detail) { setExpanded(e => !e); return; }
@@ -81,6 +84,31 @@ function UserRow({ user, token }: { user: AdminUser; token: string | null }) {
       if (r.ok) setDetail(await r.json());
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const handleGrantCredits = async () => {
+    const amount = parseInt(grantAmount, 10);
+    if (!amount || amount <= 0) return;
+    setGranting(true);
+    setGrantMsg(null);
+    try {
+      const r = await fetch(`${API_BASE}/admin/users/${user.user_id}/credits`, {
+        method: "POST",
+        headers: { ...authHeaders(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        setGrantMsg({ ok: true, text: `Granted! New balance: ${data.balance}` });
+        onCreditsGranted(user.user_id, data.balance);
+      } else {
+        setGrantMsg({ ok: false, text: data.error ?? "Failed to grant credits." });
+      }
+    } catch {
+      setGrantMsg({ ok: false, text: "Network error." });
+    } finally {
+      setGranting(false);
     }
   };
 
@@ -193,6 +221,33 @@ function UserRow({ user, token }: { user: AdminUser; token: string | null }) {
                     </div>
                   </div>
                 )}
+                {/* Grant Credits */}
+                <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid #2A2A2A" }}>
+                  <Zap className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00F0A0" }} />
+                  <span className="text-xs font-semibold" style={{ color: "#888" }}>Grant credits</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={grantAmount}
+                    onChange={e => setGrantAmount(e.target.value)}
+                    className="w-20 text-xs px-2 py-1 rounded"
+                    style={{ backgroundColor: "#1A1A1A", border: "1px solid #3A3A3A", color: "#E0E0E0" }}
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <button
+                    onClick={e => { e.stopPropagation(); void handleGrantCredits(); }}
+                    disabled={granting}
+                    className="text-xs font-semibold px-3 py-1 rounded transition-opacity"
+                    style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", opacity: granting ? 0.6 : 1 }}
+                  >
+                    {granting ? "Granting…" : "Grant"}
+                  </button>
+                  {grantMsg && (
+                    <span className="text-xs" style={{ color: grantMsg.ok ? "#00F0A0" : "#EF4444" }}>
+                      {grantMsg.text}
+                    </span>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-sm" style={{ color: "#666" }}>Failed to load details.</div>
@@ -319,7 +374,7 @@ export default function Admin() {
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <UserRow key={u.user_id} user={u} token={token} />
+                  <UserRow key={u.user_id} user={u} token={token} onCreditsGranted={(id, bal) => setUsers(prev => prev.map(x => x.user_id === id ? { ...x, credits: bal } : x))} />
                 ))}
               </tbody>
             </table>

@@ -147,4 +147,38 @@ router.get("/stats", async (req, res) => {
   }
 });
 
+// POST /api/admin/users/:userId/credits — grant credits to a user
+router.post("/users/:userId/credits", async (req, res) => {
+  const admin = await requireAdmin(req, res);
+  if (!admin) return;
+
+  const { userId } = req.params;
+  const amount = Number(req.body?.amount);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return res.status(400).json({ error: "amount must be a positive integer" });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO user_credits (user_id, balance, total_purchased, free_used)
+       VALUES ($1, $2, $2, 0)
+       ON CONFLICT (user_id) DO UPDATE
+       SET balance = user_credits.balance + $2,
+           total_purchased = user_credits.total_purchased + $2,
+           updated_at = now()`,
+      [userId, amount],
+    );
+    await pool.query(
+      `INSERT INTO credit_events (user_id, delta, reason, source_id, metadata)
+       VALUES ($1, $2, 'admin_grant', $3, $4::jsonb)`,
+      [userId, amount, `admin:${admin.id}`, JSON.stringify({ grantedBy: admin.email, amount })],
+    );
+    const result = await pool.query(`SELECT balance FROM user_credits WHERE user_id = $1`, [userId]);
+    return res.json({ success: true, balance: result.rows[0]?.balance ?? amount });
+  } catch (err) {
+    logger.error({ err, userId }, "Admin grant credits failed");
+    return res.status(500).json({ error: "Could not grant credits." });
+  }
+});
+
 export default router;
