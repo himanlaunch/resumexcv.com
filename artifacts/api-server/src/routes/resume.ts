@@ -229,8 +229,10 @@ function sanitizeTailoringResult(result: TailoringResult): TailoringResult {
         const proposed = change.section?.toLowerCase().includes("skill")
           ? sanitizeResumeSkillText(change.proposed)
           : sanitizeResumeText(change.proposed);
-        // Gap rows must always be "confirm" so the user can Accept/Retry/Reject them
-        const hasGap = change.gapType != null && change.gapType !== "null" && change.gapType !== "";
+        // Gap rows must always be "confirm" so the user can Accept/Retry/Reject them.
+        // Exception: Summary is always a narrative rewrite from existing experience — never block it.
+        const isSummary = change.section?.toLowerCase() === "summary";
+        const hasGap = !isSummary && change.gapType != null && change.gapType !== "null" && change.gapType !== "";
         const status = hasGap && change.status !== "confirm" ? "confirm" : change.status;
         return { ...change, proposed, status };
       })

@@ -42,9 +42,9 @@ router.get("/users", async (req, res) => {
     // Main query: $1=limit, $2=offset, $3=search (if present)
     const searchClause = search
       ? `AND (
-           urp.resume->>'name' ILIKE $3
-        OR urp.resume->>'email' ILIKE $3
-        OR urp.resume->>'phone' ILIKE $3
+           urp.resume->'contact'->>'name' ILIKE $3
+        OR urp.resume->'contact'->>'email' ILIKE $3
+        OR urp.resume->'contact'->>'phone' ILIKE $3
         OR au.email ILIKE $3
        )`
       : "";
@@ -52,9 +52,9 @@ router.get("/users", async (req, res) => {
     // Count query: $1=search (if present)
     const countSearchClause = search
       ? `AND (
-           urp.resume->>'name' ILIKE $1
-        OR urp.resume->>'email' ILIKE $1
-        OR urp.resume->>'phone' ILIKE $1
+           urp.resume->'contact'->>'name' ILIKE $1
+        OR urp.resume->'contact'->>'email' ILIKE $1
+        OR urp.resume->'contact'->>'phone' ILIKE $1
         OR au.email ILIKE $1
        )`
       : "";
@@ -65,11 +65,11 @@ router.get("/users", async (req, res) => {
     const result = await pool.query(
       `SELECT
          urp.user_id,
-         urp.resume->>'name'     AS name,
-         COALESCE(au.email, urp.resume->>'email') AS email,
-         urp.resume->>'phone'    AS phone,
-         urp.resume->>'location' AS location,
-         urp.resume->>'summary'  AS summary,
+         urp.resume->'contact'->>'name'     AS name,
+         COALESCE(au.email, urp.resume->'contact'->>'email') AS email,
+         urp.resume->'contact'->>'phone'    AS phone,
+         urp.resume->'contact'->>'location' AS location,
+         urp.resume->>'summary'             AS summary,
          urp.file_name,
          urp.updated_at,
          COALESCE(uc.balance, 0)          AS credits,
