@@ -1539,7 +1539,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
   }
 
   return (
-    <div className="flex-1 p-3 sm:p-4 md:p-8 overflow-auto">
+    <div className="flex-1 p-3 sm:p-4 md:p-8 overflow-auto overflow-x-hidden w-full min-w-0">
       <div className="max-w-4xl mx-auto">
         <div className="mb-5 md:mb-8">
           <div className="chip-mint inline-flex mb-2 md:mb-3">Step 1 of 4</div>
@@ -1649,7 +1649,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                             {isSel && <Check className="w-3 h-3" style={{ color: "#0A0A0A" }} />}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold" style={{ color: "#0A0A0A" }}>{title}</p>
+                            <p className="text-sm font-semibold truncate" style={{ color: "#0A0A0A" }}>{title}</p>
                             <p className="text-xs truncate" style={{ color: "#888" }}>{reason}</p>
                           </div>
                         </div>
@@ -1666,7 +1666,7 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                           <Check className="w-3 h-3" style={{ color: "#0A0A0A" }} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold" style={{ color: "#0A0A0A" }}>{title}</p>
+                          <p className="text-sm font-semibold truncate" style={{ color: "#0A0A0A" }}>{title}</p>
                           <p className="text-xs truncate" style={{ color: "#888" }}>Custom target role</p>
                         </div>
                       </div>
@@ -5132,7 +5132,7 @@ export default function AppWorkspace() {
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: "#F2F4F5" }}>
       <Sidebar step={step} setStep={navigateTo} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} showMyResumes={showMyResumes} onShowMyResumes={() => setShowMyResumes(true)} />
-      <main className="flex-1 min-h-screen overflow-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
+      <main className="flex-1 min-h-screen overflow-x-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
         {/* Promo banner for signed-out users */}
         {!user && !authLoading && (
           <div className="flex items-center justify-between gap-3 px-4 py-2.5"
