@@ -27,14 +27,10 @@ function isSafePublicUrl(rawUrl: string): boolean {
   return true;
 }
 
-const DEPLOYMENT = process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5.5";
+const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL ?? "kimi-k2.6";
 const openai = new OpenAI({
-  apiKey:
-    process.env.AZURE_OPENAI_KEY ??
-    process.env.AZURE_OPENAI_API_KEY ??
-    process.env.OPENAI_API_KEY ??
-    "missing-api-key",
-  baseURL: process.env.AZURE_OPENAI_ENDPOINT,
+  apiKey: process.env.DIGITALOCEAN_TOKEN ?? "missing-api-key",
+  baseURL: "https://inference.do-ai.run/v1",
 });
 
 const router = Router();
