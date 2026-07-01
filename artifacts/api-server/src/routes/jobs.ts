@@ -27,7 +27,7 @@ function isSafePublicUrl(rawUrl: string): boolean {
   return true;
 }
 
-const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL ?? "kimi-k2.6";
+const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL ?? "glm-z1-5.2";
 const openai = new OpenAI({
   apiKey: process.env.DIGITALOCEAN_TOKEN ?? "missing-api-key",
   baseURL: "https://inference.do-ai.run/v1",
