@@ -403,7 +403,6 @@ Malformed JSON:
 ${malformedJson.slice(0, 50000)}`,
       },
     ],
-    response_format: { type: "json_object" },
   });
 
   const repaired = completion.choices[0]?.message?.content ?? "{}";
@@ -478,7 +477,7 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_completion_tokens: 8192,
+      max_tokens: 8192,
       messages: [
         {
           role: "system",
@@ -532,7 +531,6 @@ RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
         },
       ],
-      response_format: { type: "json_object" },
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -644,7 +642,6 @@ router.post("/tailor", async (req, res) => {
           { role: "user", content: prompt },
         ],
         stream: true,
-        response_format: { type: "json_object" },
       },
       // Abort the streaming request if the model hasn't finished in 90s
       { signal: AbortSignal.timeout(90_000) },
@@ -778,7 +775,7 @@ router.post("/suggest-gap-experience", async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_completion_tokens: 512,
+      max_tokens: 512,
       messages: [
         {
           role: "system",
@@ -810,7 +807,6 @@ Rules:
 - Title should be neutral and honest (e.g. "Career Development", "Freelance Projects", "Independent Consulting")`,
         },
       ],
-      response_format: { type: "json_object" },
     });
 
     const text = completion.choices[0]?.message?.content ?? "{}";
@@ -848,7 +844,7 @@ router.post("/retry-change", async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_completion_tokens: 512,
+      max_tokens: 512,
       messages: [
         { role: "system", content: SYSTEM_TAILORING },
         {
@@ -868,7 +864,6 @@ The user rejected this. Generate ONE alternative suggestion that:
 Return JSON: { "proposed": "...", "rationale": "..." }`,
         },
       ],
-      response_format: { type: "json_object" },
     });
 
     const text = completion.choices[0]?.message?.content ?? "{}";
@@ -898,7 +893,7 @@ router.post("/cover-letter", async (req, res) => {
   try {
     const stream = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_completion_tokens: 1024,
+      max_tokens: 1024,
       messages: [
         {
           role: "system",
