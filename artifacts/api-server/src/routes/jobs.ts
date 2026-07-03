@@ -864,7 +864,7 @@ router.post("/from-url", async (req, res) => {
         : pageText;
       const completion = await openai.chat.completions.create({
         model: DEPLOYMENT,
-        max_completion_tokens: 900,
+        max_tokens: 900,
         messages: [
           {
             role: "system",
@@ -891,7 +891,6 @@ Rules:
 - The description must be the job's real content — not navigation text, cookie banners, or boilerplate.`,
           },
         ],
-        response_format: { type: "json_object" },
       });
 
       const raw = completion.choices[0]?.message?.content ?? "{}";
