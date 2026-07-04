@@ -502,7 +502,7 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
       .catch(() => {
         if (!cancelled) setPlans([
           { id: null, credits: 30, price: "$10.00", label: "30 resume credits", popular: true },
-          { id: null, credits: 100, price: "$19.99", label: "100 resume credits", popular: false },
+          { id: null, credits: 100, price: "$20.00", label: "100 resume credits", popular: false },
         ]);
       })
       .finally(() => {

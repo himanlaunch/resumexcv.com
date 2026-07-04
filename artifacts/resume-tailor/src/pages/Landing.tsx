@@ -125,7 +125,7 @@ interface PricingPlan {
 const PRICING: PricingPlan[] = [
   { id: null, credits: 10, price: "Free", label: "First 10 Resumes Free", popular: false },
   { id: null, credits: 30, price: "$10.00", label: "30 resume credits", popular: true },
-  { id: null, credits: 100, price: "$19.99", label: "100 resume credits", popular: false },
+  { id: null, credits: 100, price: "$20.00", label: "100 resume credits", popular: false },
 ];
 
 function normalizePricingPlans(prices?: PricingPlan[]) {
