@@ -13,12 +13,12 @@ const stripe = stripeSecretKey
   : null;
 
 const FALLBACK_30_PRICE_ID = "resumex100_30_credits_1000";
-const FALLBACK_100_PRICE_ID = "resumex100_100_credits_1999";
+const FALLBACK_100_PRICE_ID = "resumex100_100_credits_2000";
 
 const fallbackPrices = [
   { id: null, credits: 10, price: "Free", label: "First 10 Resumes Free", popular: false },
   { id: FALLBACK_30_PRICE_ID, credits: 30, price: "$10.00", label: "30 resume credits", popular: true },
-  { id: FALLBACK_100_PRICE_ID, credits: 100, price: "$19.99", label: "100 resume credits", popular: false },
+  { id: FALLBACK_100_PRICE_ID, credits: 100, price: "$20.00", label: "100 resume credits", popular: false },
 ];
 
 function configuredPriceIds(): string[] {
@@ -65,7 +65,7 @@ function inferCredits(price: Stripe.Price): number {
   const match = source.match(/\b(\d+)\b/);
   if (match) return Number(match[1]);
   if (price.currency === "usd" && price.unit_amount === 1000) return 30;
-  if (price.currency === "usd" && price.unit_amount === 1999) return 100;
+  if (price.currency === "usd" && price.unit_amount === 2000) return 100;
   return 1;
 }
 
@@ -175,7 +175,7 @@ router.post("/checkout", async (req, res) => {
     const forwardedHost = String(req.headers["x-forwarded-host"] ?? req.get("host")).split(",")[0].trim();
     const origin = `${forwardedProto}://${forwardedHost}`;
     const credits = effectivePriceId === FALLBACK_30_PRICE_ID ? 30 : effectivePriceId === FALLBACK_100_PRICE_ID ? 100 : inferCredits(price);
-    const fallbackAmount = effectivePriceId === FALLBACK_100_PRICE_ID ? 1999 : 1000;
+    const fallbackAmount = effectivePriceId === FALLBACK_100_PRICE_ID ? 2000 : 1000;
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [
