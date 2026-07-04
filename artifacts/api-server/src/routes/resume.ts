@@ -214,20 +214,62 @@ function sanitizeResumeSkillText(value: string | null | undefined): string {
   );
 }
 
+// Normalize gapType — GLM uses non-standard values like "skill_gap", "alignment", "seniority_gap"
+function normalizeGapType(raw: unknown): null | "keyword" | "evidence" | "true_gap" {
+  if (raw == null || raw === "null" || raw === "" || raw === false) return null;
+  const s = String(raw).toLowerCase().replace(/[\s_\-]/g, "");
+  if (s === "truegap" || s === "missingskill" || s === "noexperience" || s === "missing" || s === "absent") return "true_gap";
+  if (s === "evidence" || s === "evidencegap" || s === "noevidence" || s === "claimed") return "evidence";
+  if (s === "keyword" || s === "keywordgap" || s === "phrasing") return "keyword";
+  // "skill_gap", "alignment", "seniority_gap", "leadership_gap" and unknown non-null values → keyword (weakest/safest)
+  return "keyword";
+}
+
+// Normalize status — GLM uses "suggested", "proposed", "recommended", etc.
+function normalizeChangeStatus(raw: unknown): "rewritten" | "kept" | "confirm" {
+  const s = String(raw ?? "").toLowerCase().replace(/[\s_\-]/g, "");
+  if (s === "rewritten" || s === "rewrite" || s === "updated" || s === "modified") return "rewritten";
+  if (s === "kept" || s === "keep" || s === "unchanged" || s === "retain") return "kept";
+  return "confirm";
+}
+
+// Normalize seniorityMatch — GLM sometimes returns a full sentence instead of the enum value
+function normalizeSeniorityMatch(raw: unknown): "perfect" | "stretch" | "overqualified" {
+  const s = String(raw ?? "").toLowerCase();
+  if (s.startsWith("perfect") || s === "match" || s === "ideal") return "perfect";
+  if (s.startsWith("overqualified") || s.includes("overqualified")) return "overqualified";
+  return "stretch";
+}
+
+// Normalize skillGaps arrays — GLM sometimes returns booleans or mixed types instead of strings
+function normalizeSkillGapArray(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((v) => typeof v === "string" && v.trim().length > 0).map((v) => String(v).trim());
+}
+
 function sanitizeTailoringResult(result: TailoringResult): TailoringResult {
   return {
     ...result,
+    matchScore: typeof result.matchScore === "number" ? Math.min(100, Math.max(0, result.matchScore)) : 50,
+    seniorityMatch: normalizeSeniorityMatch(result.seniorityMatch),
+    skillGaps: {
+      keyword: normalizeSkillGapArray(result.skillGaps?.keyword),
+      evidence: normalizeSkillGapArray(result.skillGaps?.evidence),
+      trueGap: normalizeSkillGapArray(result.skillGaps?.trueGap),
+    },
     changes: (result.changes ?? [])
       .map((change) => {
         const proposed = change.section?.toLowerCase().includes("skill")
           ? sanitizeResumeSkillText(change.proposed)
           : sanitizeResumeText(change.proposed);
+        const gapType = normalizeGapType(change.gapType);
+        const rawStatus = normalizeChangeStatus(change.status);
         // Gap rows must always be "confirm" so the user can Accept/Retry/Reject them.
-        // Exception: Summary is always a narrative rewrite from existing experience — never block it.
+        // Exception: Summary is always a narrative rewrite — never block it.
         const isSummary = change.section?.toLowerCase() === "summary";
-        const hasGap = !isSummary && change.gapType != null && change.gapType !== "null" && change.gapType !== "";
-        const status = hasGap && change.status !== "confirm" ? "confirm" : change.status;
-        return { ...change, proposed, status };
+        const hasGap = !isSummary && gapType != null;
+        const status = hasGap && rawStatus !== "confirm" ? "confirm" : rawStatus;
+        return { ...change, proposed, gapType, status };
       })
       .filter((change) => change.proposed || change.status !== "rewritten"),
   };
@@ -949,7 +991,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
 
 {
   "matchScore": <number 0-100 — the PROJECTED keyword match AFTER the user accepts all your proposed changes. Aim for 85-95. This is not the current score; it is the score the resume will have once all rewrites are applied.>,
-  "seniorityMatch": <"perfect" | "stretch" | "overqualified">,
+  "seniorityMatch": "<MUST be exactly one of these three strings: perfect | stretch | overqualified>",
   "changes": [
     {
       "id": "<unique string>",
@@ -957,18 +999,24 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
       "original": "<original text from resume or '[Not in resume]'>",
       "jobReq": "<specific requirement from job description this addresses>",
       "proposed": "<final resume-ready rewrite only; no notes, reasoning, caveats, or instructions>",
-      "status": <"rewritten" | "kept" | "confirm">,
-      "gapType": <null | "keyword" | "evidence" | "true_gap">,
-      "gapNote": "<explanation if gapType is not null>"
+      "status": "<MUST be exactly one of: rewritten | kept | confirm>",
+      "gapType": "<MUST be exactly one of: null | keyword | evidence | true_gap>",
+      "gapNote": "<explanation if gapType is not null, else empty string>"
     }
   ],
   "skillGaps": {
-    "keyword": ["<skill in resume but phrased differently>"],
-    "evidence": ["<skill claimed but no example bullet>"],
-    "trueGap": ["<required skill completely absent from resume>"]
+    "keyword": ["<skill name as a plain string — skill is in resume but phrased differently>"],
+    "evidence": ["<skill name as a plain string — skill claimed but no supporting bullet>"],
+    "trueGap": ["<skill name as a plain string — required skill completely absent from resume>"]
   },
-  "senioritySignals": ["<list of seniority-tone suggestions, e.g. change 'I built' to 'Led team to build'>"]
+  "senioritySignals": ["<seniority-tone suggestion>"]
 }
+
+ENUM VALUES — you MUST use these exact strings, nothing else:
+- seniorityMatch: "perfect" (role fits candidate level), "stretch" (candidate is junior for role), "overqualified" (candidate is senior for role)
+- status: "rewritten" (you rewrote existing content), "kept" (existing content is already good), "confirm" (new content or gap content the user must review)
+- gapType: null (no gap), "keyword" (skill present but not keyworded correctly), "evidence" (skill claimed but no bullet proves it), "true_gap" (skill completely absent)
+- skillGaps arrays MUST contain plain skill-name strings ONLY — never booleans, numbers, or objects
 
 TAILORING RULES — follow all of these:
 1. Coverage target: your proposed changes must collectively inject at least 85% of the job's important keywords into the resume. Review the job description carefully and identify every significant keyword, skill, tool, methodology, and requirement. Rewrite bullets and the summary to naturally incorporate them.
