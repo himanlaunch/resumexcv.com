@@ -514,7 +514,7 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
 
   if (!open) return null;
   const paidPlans = plans
-    .filter(plan => plan.credits >= 10)
+    .filter(plan => plan.credits > 10)
     .sort((a, b) => a.credits - b.credits)
     .slice(0, 3);
   const displayPlans = paidPlans.length > 0
