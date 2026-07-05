@@ -426,7 +426,7 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
                         <button
                           onClick={() => { void download(version, "docx"); }}
                           disabled={downloadingVersion?.id === version.id}
-                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-full transition-all min-h-[36px]"
                           title="Download DOCX"
                           style={{ backgroundColor: "#ECFFE0", color: "#005A3D", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
                         >
@@ -436,7 +436,7 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
                         <button
                           onClick={() => { void download(version, "pdf"); }}
                           disabled={downloadingVersion?.id === version.id}
-                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-full transition-all min-h-[36px]"
                           title="Download PDF"
                           style={{ backgroundColor: "#F0F0F0", color: "#444", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
                         >
@@ -445,7 +445,7 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
                         </button>
                         <button
                           onClick={() => setPreviewingVersionId(isPreviewing ? null : version.id)}
-                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-full transition-all min-h-[36px]"
                           style={{ backgroundColor: isPreviewing ? "#0A0A0A" : "#F0F0F0", color: isPreviewing ? "#fff" : "#444" }}
                         >
                           {isPreviewing ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -470,8 +470,10 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
                   </div>
                   {isPreviewing && (
                     <div style={{ borderTop: "1px solid #F0F0F0", padding: "0 16px 16px" }}>
-                      <div style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)", borderRadius: 8, marginTop: 12 }}>
-                        <ResumePreview resume={version.resume} jobTitle={version.jobTitle} jobCompany={version.jobCompany} />
+                      <div style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)", borderRadius: 8, marginTop: 12, overflowX: "auto" }}>
+                        <div style={{ minWidth: 560 }}>
+                          <ResumePreview resume={version.resume} jobTitle={version.jobTitle} jobCompany={version.jobCompany} />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -541,8 +543,8 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
-      <div className="w-full max-w-2xl rounded-2xl p-5 md:p-6" style={{ backgroundColor: "#fff", border: "1px solid #E5E8EA", boxShadow: "0 20px 60px rgba(0,0,0,0.22)" }}>
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+      <div className="w-full max-w-2xl rounded-t-2xl sm:rounded-2xl p-5 md:p-6 overflow-y-auto" style={{ backgroundColor: "#fff", border: "1px solid #E5E8EA", boxShadow: "0 20px 60px rgba(0,0,0,0.22)", maxHeight: "90dvh" }}>
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
             <h2 className="font-heading font-bold text-2xl" style={{ color: "#0A0A0A" }}>Buy resume credits</h2>
@@ -594,31 +596,58 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
   );
 }
 
+// ── Mobile top header ─────────────────────────────────────────────────────────
+
+function MobileHeader({ credits, onBuyCredits, user }: { credits: CreditBalance | null; onBuyCredits: () => void; user: ReturnType<typeof useAuth>["user"] }) {
+  return (
+    <div className="flex md:hidden sticky top-0 z-30 items-center justify-between px-4"
+      style={{ backgroundColor: "#0F0F0F", borderBottom: "1px solid #1E1E1E", minHeight: 52 }}>
+      <Link href="/">
+        <BrandLogo onDark imageClassName="h-7" />
+      </Link>
+      {user ? (
+        <button onClick={onBuyCredits}
+          className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-full"
+          style={{ backgroundColor: "rgba(0,240,160,0.15)", color: "#00F0A0", border: "1px solid rgba(0,240,160,0.3)", minHeight: 36 }}>
+          <Zap className="w-3.5 h-3.5 flex-shrink-0" />
+          {credits?.balance ?? 0} credits
+        </button>
+      ) : (
+        <Link href="/signin"
+          className="text-xs font-bold px-3 py-2 rounded-full"
+          style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", minHeight: 36, display: "inline-flex", alignItems: "center" }}>
+          Sign in free
+        </Link>
+      )}
+    </div>
+  );
+}
+
 // ── Mobile bottom nav ─────────────────────────────────────────────────────────
 
 function MobileBottomNav({ step, setStep, completedSteps }: { step: Step; setStep: (s: Step) => void; completedSteps: Set<Step> }) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden items-stretch"
-      style={{ backgroundColor: "#0F0F0F", borderTop: "1px solid #1E1E1E", height: 60 }}>
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden items-stretch mobile-safe-nav"
+      style={{ backgroundColor: "#0F0F0F", borderTop: "1px solid #1E1E1E" }}>
       {STEPS.map((s) => {
         const isActive = step === s.num;
         const isDone = completedSteps.has(s.num) && !isActive;
         return (
           <button key={s.num} onClick={() => setStep(s.num)}
-            className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all py-3"
             style={{ color: isActive ? "#4DFFBD" : isDone ? "#D1D5DB" : "#9CA3AF" }}>
             <div className="w-5 h-5 flex items-center justify-center">
               {isDone ? <Check className="w-4 h-4" style={{ color: "#00F0A0" }} /> : s.icon}
             </div>
-            <span style={{ fontSize: "0.6rem", fontWeight: 600, lineHeight: 1 }}>{s.label.split(" ")[0]}</span>
+            <span style={{ fontSize: "0.7rem", fontWeight: 600, lineHeight: 1 }}>{s.label.split(" ")[0]}</span>
           </button>
         );
       })}
       <Link href="/campaigns"
-        className="flex-1 flex flex-col items-center justify-center gap-0.5"
+        className="flex-1 flex flex-col items-center justify-center gap-0.5 py-3"
         style={{ color: "#555" }}>
         <Briefcase className="w-4 h-4" />
-        <span style={{ fontSize: "0.6rem", fontWeight: 600, lineHeight: 1 }}>Track</span>
+        <span style={{ fontSize: "0.7rem", fontWeight: 600, lineHeight: 1 }}>Track</span>
       </Link>
     </nav>
   );
@@ -745,7 +774,7 @@ function LocationPicker({
                 style={{ backgroundColor: "#ECFFE0", border: "1px solid rgba(0,240,160,0.3)", color: "#0A0A0A" }}
               >
                 {suggestion?.icon} {loc}
-                <button onClick={() => remove(loc)} style={{ color: "#888" }}>
+                <button onClick={() => remove(loc)} className="p-1 -mr-1 rounded-full" style={{ color: "#888" }}>
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -830,7 +859,7 @@ function LocationPicker({
             <button
               key={label}
               onClick={() => add(label)}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-all"
+              className="flex items-center gap-1.5 text-xs px-3 py-2.5 rounded-full font-medium transition-all min-h-[44px]"
               style={{ backgroundColor: "#F0F0F0", color: "#555", border: "1px solid #E0E0E0" }}
               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#ECFFE0"; }}
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#F0F0F0"; }}
@@ -2242,7 +2271,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                   <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Posted:</span>
                   <button
                     onClick={() => setTimeFilter(null)}
-                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                    className="text-xs px-3 py-2 rounded-full font-medium transition-all min-h-[36px]"
                     style={{ backgroundColor: timeFilter === null ? "#00F0A0" : "#fff", color: timeFilter === null ? "#0A0A0A" : "#555", border: timeFilter === null ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
                   >
                     Any
@@ -2250,7 +2279,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                   {TIME_FILTERS.map(f => (
                     <button key={f.label}
                       onClick={() => setTimeFilter(prev => prev === f.label ? null : f.label)}
-                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      className="text-xs px-3 py-2 rounded-full font-medium transition-all min-h-[36px]"
                       style={{ backgroundColor: timeFilter === f.label ? "#00F0A0" : "#fff", color: timeFilter === f.label ? "#0A0A0A" : "#555", border: timeFilter === f.label ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
                     >
                       {f.label}
@@ -2259,7 +2288,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                 </div>
                 <button
                   onClick={() => setSortByMatch(v => !v)}
-                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all flex-shrink-0"
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full transition-all flex-shrink-0 min-h-[36px]"
                   style={{ backgroundColor: sortByMatch ? "#0A0A0A" : "#fff", color: sortByMatch ? "#00F0A0" : "#555", border: sortByMatch ? "1.5px solid #0A0A0A" : "1.5px solid #D0D5DD" }}
                 >
                   <TrendingUp className="w-3 h-3" />
@@ -2272,14 +2301,14 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                   <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Platform:</span>
                   <button
                     onClick={() => setActivePlatforms(new Set())}
-                    className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                    className="text-xs px-3 py-2 rounded-full font-medium transition-all min-h-[36px]"
                     style={{ backgroundColor: activePlatforms.size === 0 ? "#00F0A0" : "#fff", color: activePlatforms.size === 0 ? "#0A0A0A" : "#555", border: activePlatforms.size === 0 ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
                   >
                     All
                   </button>
                   {platformOptions.map(({ label: p, count }) => (
                     <button key={p} onClick={() => togglePlatform(p)}
-                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      className="text-xs px-3 py-2 rounded-full font-medium transition-all min-h-[36px]"
                       style={{ backgroundColor: activePlatforms.has(p) ? "#00F0A0" : "#fff", color: activePlatforms.has(p) ? "#0A0A0A" : "#555", border: activePlatforms.has(p) ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
                     >
                       {p} <span style={{ opacity: 0.6 }}>{count}</span>
@@ -2293,7 +2322,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                   <span className="text-xs font-semibold flex-shrink-0" style={{ color: "#555" }}>Match:</span>
                   {[0, 40, 60, 75, 90].map(pct => (
                     <button key={pct} onClick={() => setMinScore(pct)}
-                      className="text-xs px-3 py-1 rounded-full font-medium transition-all"
+                      className="text-xs px-3 py-2 rounded-full font-medium transition-all min-h-[36px]"
                       style={{ backgroundColor: minScore === pct ? "#00F0A0" : "#fff", color: minScore === pct ? "#0A0A0A" : "#555", border: minScore === pct ? "1.5px solid #00F0A0" : "1.5px solid #D0D5DD" }}
                     >
                       {pct === 0 ? "Any" : `${pct}%+`}
@@ -2344,7 +2373,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                     type="button"
                     onClick={handlePreviousPage}
                     disabled={currentPage === 1}
-                    className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+                    className="w-11 h-11 rounded-full flex items-center justify-center transition-all"
                     style={{ backgroundColor: currentPage === 1 ? "#F0F0F0" : "#fff", border: "1.5px solid #D0D5DD", color: currentPage === 1 ? "#aaa" : "#0A0A0A" }}
                     aria-label="Previous jobs page"
                   >
@@ -2357,7 +2386,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
                     type="button"
                     onClick={() => void handleNextPage()}
                     disabled={(currentPage >= totalPages && !hasMore) || (currentPage >= totalPages && loadingMore)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+                    className="w-11 h-11 rounded-full flex items-center justify-center transition-all"
                     style={{ backgroundColor: (currentPage >= totalPages && loadingMore) ? "#F0F0F0" : "#fff", border: "1.5px solid #D0D5DD", color: (currentPage >= totalPages && !hasMore) || (currentPage >= totalPages && loadingMore) ? "#aaa" : "#0A0A0A" }}
                     aria-label="Next jobs page"
                   >
@@ -2961,7 +2990,7 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
             const color = companyColor(j.company);
             return (
               <button key={j.id} onClick={() => setActiveJobId(j.id)}
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all flex-shrink-0"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all flex-shrink-0 min-h-[44px]"
                 style={{ backgroundColor: activeJobId === j.id ? "#0A0A0A" : "white", color: activeJobId === j.id ? "white" : "#444", border: "1px solid", borderColor: activeJobId === j.id ? "#0A0A0A" : "#E0E0E0" }}
               >
                 <div className="w-5 h-5 rounded-full text-white text-xs flex items-center justify-center font-bold flex-shrink-0" style={{ backgroundColor: color }}>{j.company[0]}</div>
@@ -3213,14 +3242,14 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
         {row.status !== "kept" && (
           <div className="flex items-center gap-1 flex-wrap">
             <button onClick={() => { setEditMode(true); setEditText(row.customText ?? row.proposed ?? ""); }}
-              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-lg transition-all"
+              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2.5 rounded-lg transition-all min-h-[40px]"
               style={{ color: "#555" }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = "#EBEBEB"}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
               title="Edit this suggestion"
             ><Pen className="w-3 h-3" /> Edit</button>
             <button onClick={() => onRetry(row.id)} disabled={row.retrying}
-              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2 rounded-lg transition-all"
+              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-2.5 rounded-lg transition-all min-h-[40px]"
               style={{ color: row.retrying ? "#aaa" : "#555" }}
               onMouseEnter={e => { if (!row.retrying) e.currentTarget.style.backgroundColor = "#EBEBEB"; }}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
@@ -3255,7 +3284,7 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
                 value={editText} onChange={e => setEditText(e.target.value)} autoFocus />
               <div className="flex flex-col sm:flex-row gap-2">
                 <button onClick={() => { onCustomText(row.id, editText); setEditMode(false); }}
-                  className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+                  className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-3 rounded-full min-h-[44px]"
                   style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
                 ><Check className="w-3 h-3" /> Use this text</button>
                 <button onClick={() => setEditMode(false)} className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
@@ -3270,11 +3299,11 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
                   {isPending && (
                     <div className="flex flex-col sm:flex-row gap-2 mt-3">
                       <button onClick={() => onConfirm(row.id, true)}
-                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-3 rounded-full min-h-[44px]"
                         style={{ backgroundColor: "#00F0A0", color: "#0A0A0A", border: "1px solid #0A0A0A" }}
                       ><ThumbsUp className="w-3.5 h-3.5" /> Accept</button>
                       <button onClick={() => onConfirm(row.id, false)}
-                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full"
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-3 rounded-full min-h-[44px]"
                         style={{ backgroundColor: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5" }}
                       ><ThumbsDown className="w-3.5 h-3.5" /> Reject</button>
                     </div>
@@ -5132,7 +5161,8 @@ export default function AppWorkspace() {
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: "#F2F4F5" }}>
       <Sidebar step={step} setStep={navigateTo} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} showMyResumes={showMyResumes} onShowMyResumes={() => setShowMyResumes(true)} />
-      <main className="flex-1 min-h-screen overflow-x-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
+      <main className="flex-1 min-h-screen overflow-x-hidden flex flex-col mobile-safe-pb md:ml-64">
+        <MobileHeader credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} user={user} />
         {/* Promo banner for signed-out users */}
         {!user && !authLoading && (
           <div className="flex items-center justify-between gap-3 px-4 py-2.5"

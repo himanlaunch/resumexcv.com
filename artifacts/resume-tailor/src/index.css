@@ -139,13 +139,26 @@
     white-space: nowrap;
     text-decoration: none;
   }
-  @media (max-width: 420px) {
+  @media (max-width: 639px) {
     .btn-mint,
     .btn-dark,
     .btn-outline-dark {
       white-space: normal;
       text-align: center;
       line-height: 1.2;
+    }
+  }
+  /* Safe-area-aware bottom padding for mobile content and nav */
+  .mobile-safe-nav {
+    min-height: 60px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-safe-pb {
+    padding-bottom: max(64px, calc(60px + env(safe-area-inset-bottom, 0px)));
+  }
+  @media (min-width: 768px) {
+    .mobile-safe-pb {
+      padding-bottom: 0;
     }
   }
   .btn-mint:hover {

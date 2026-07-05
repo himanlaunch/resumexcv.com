@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Upload, Search, CheckSquare, ArrowRight,
   Shield, Zap, Target, ChevronRight,
-  Check, X, Sparkles, FileText, Layers, ListChecks
+  Check, X, Sparkles, FileText, Layers, ListChecks, Menu
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { createCheckout } from "@/lib/api";
@@ -157,6 +157,7 @@ function normalizePricingPlans(prices?: PricingPlan[]) {
 
 function NavBar() {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", onScroll);
@@ -167,9 +168,9 @@ function NavBar() {
     <nav
       className="fixed top-0 left-0 right-0 z-50 transition-all duration-200"
       style={{
-        backgroundColor: scrolled ? "rgba(242,244,245,0.95)" : "transparent",
-        backdropFilter: scrolled ? "blur(12px)" : "none",
-        borderBottom: scrolled ? "1px solid #E5E8EA" : "none",
+        backgroundColor: scrolled || mobileOpen ? "rgba(242,244,245,0.97)" : "transparent",
+        backdropFilter: scrolled || mobileOpen ? "blur(12px)" : "none",
+        borderBottom: scrolled || mobileOpen ? "1px solid #E5E8EA" : "none",
       }}
     >
       <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 h-14 md:h-16 flex items-center justify-between gap-3">
@@ -193,8 +194,30 @@ function NavBar() {
             Sign In
           </Link>
           <Link href="/app" className="btn-mint text-xs sm:text-sm" style={{ padding: "0.45rem 0.75rem", minHeight: 40 }}>Start Free</Link>
+          <button
+            className="flex md:hidden w-10 h-10 items-center justify-center rounded-full transition-colors"
+            style={{ color: "#0A0A0A" }}
+            onClick={() => setMobileOpen(v => !v)}
+            aria-label="Toggle navigation"
+          >
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
       </div>
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="md:hidden px-4 pb-5 pt-1 flex flex-col gap-1" style={{ borderTop: "1px solid #E5E8EA" }}>
+          {NAV_LINKS.map((l) => (
+            <a key={l.label} href={l.href} onClick={() => setMobileOpen(false)}
+              className="text-sm font-semibold py-3 px-2 rounded-xl"
+              style={{ color: "#0A0A0A" }}
+            >{l.label}</a>
+          ))}
+          <Link href="/signin" onClick={() => setMobileOpen(false)}
+            className="btn-outline-dark w-full mt-2 text-center"
+          >Sign In</Link>
+        </div>
+      )}
     </nav>
   );
 }
@@ -293,7 +316,7 @@ function ProblemShiftSection() {
       <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
         <div className="p-8 md:p-10 rounded-2xl" style={{ backgroundColor: "#0A0A0A", color: "#fff" }}>
           <div className="chip-mint inline-flex mb-5">The problem</div>
-          <h2 className="font-heading font-bold text-4xl md:text-5xl mb-5">
+          <h2 className="font-heading font-bold text-3xl sm:text-4xl md:text-5xl mb-5">
             One resume. A hundred rejections.
           </h2>
           <p className="text-base md:text-lg leading-relaxed" style={{ color: "#D1D5DB" }}>
@@ -304,7 +327,7 @@ function ProblemShiftSection() {
         </div>
         <div className="p-8 md:p-10 rounded-2xl" style={{ backgroundColor: "#ECFFE0", border: "1px solid rgba(0,240,160,0.35)" }}>
           <div className="chip-mint inline-flex mb-5">The shift</div>
-          <h2 className="font-heading font-bold text-4xl md:text-5xl mb-5" style={{ color: "#0A0A0A" }}>
+          <h2 className="font-heading font-bold text-3xl sm:text-4xl md:text-5xl mb-5" style={{ color: "#0A0A0A" }}>
             What if tailoring wasn't the bottleneck?
           </h2>
           <p className="text-base md:text-lg leading-relaxed" style={{ color: "#374151" }}>
@@ -641,7 +664,7 @@ function CTASection() {
         <p className="text-lg mb-8" style={{ color: "rgba(0,0,0,0.65)" }}>
           Apply at the scale your job search actually needs.
         </p>
-        <Link href="/app" className="btn-dark" style={{ fontSize: "1.05rem", padding: "0.85rem 2.5rem" }}>
+        <Link href="/app" className="btn-dark w-full sm:w-auto" style={{ fontSize: "1.05rem", padding: "0.85rem 2.5rem" }}>
           Generate My First Batch Free <ArrowRight className="w-5 h-5" />
         </Link>
       </div>
@@ -656,7 +679,7 @@ function Footer() {
         <div className="flex items-center">
           <BrandLogo onDark imageClassName="h-9" />
         </div>
-        <div className="flex gap-6 text-sm" style={{ color: "#666" }}>
+        <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm" style={{ color: "#666" }}>
           <a href="#features" style={{ color: "#666" }} onMouseEnter={e => (e.currentTarget.style.color = "#fff")} onMouseLeave={e => (e.currentTarget.style.color = "#666")}>Features</a>
           <a href="#pricing" style={{ color: "#666" }} onMouseEnter={e => (e.currentTarget.style.color = "#fff")} onMouseLeave={e => (e.currentTarget.style.color = "#666")}>Pricing</a>
           <Link href="/blog" style={{ color: "#666" }}>Blog</Link>
