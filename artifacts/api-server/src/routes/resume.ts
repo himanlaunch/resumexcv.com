@@ -35,7 +35,17 @@ STRICT RULES — you must follow these without exception:
 10. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-const MAX_RESUME_PARSE_CHARS = 15000;
+const MAX_RESUME_PARSE_CHARS = 20000;
+
+// Collapse whitespace noise so the character budget is spent on actual content.
+// Removes horizontal rules, collapses blank lines (3+ → 1), trims trailing spaces per line.
+function normalizeResumeInput(raw: string): string {
+  return raw
+    .replace(/[ \t]+$/gm, "")           // trailing spaces per line
+    .replace(/^[-=_*]{4,}\s*$/gm, "")   // horizontal rules like ---- or ====
+    .replace(/\n{3,}/g, "\n\n")         // 3+ blank lines → single blank line
+    .trim();
+}
 
 function cleanJsonText(text: string): string {
   return text
@@ -487,6 +497,8 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   if (!text.trim()) {
     return res.status(400).json({ error: "No text found in the file. Make sure it is not a scanned-image PDF." });
   }
+
+  text = normalizeResumeInput(text);
 
   const fileHash = createHash("sha256").update(file.buffer).digest("hex");
 
