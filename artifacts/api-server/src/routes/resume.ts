@@ -575,7 +575,7 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw);
+    const parsed = parseJsonObject<Record<string, unknown>>(raw);
     // Sanitize before returning and caching so dedup/classification always applies
     if (parsed?.resume) {
       parsed.resume = sanitizeResumeRecord(parsed.resume);
