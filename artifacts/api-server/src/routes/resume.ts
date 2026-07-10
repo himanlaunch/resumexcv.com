@@ -213,7 +213,7 @@ function sanitizeResumeSkillText(value: string | null | undefined): string {
   );
 }
 
-// Normalize gapType — GLM uses non-standard values like "skill_gap", "alignment", "seniority_gap"
+// Normalize gapType — model sometimes returns non-standard values like "skill_gap", "alignment", "seniority_gap"
 function normalizeGapType(raw: unknown): null | "keyword" | "evidence" | "true_gap" {
   if (raw == null || raw === "null" || raw === "" || raw === false) return null;
   const s = String(raw).toLowerCase().replace(/[\s_\-]/g, "");
@@ -224,7 +224,7 @@ function normalizeGapType(raw: unknown): null | "keyword" | "evidence" | "true_g
   return "keyword";
 }
 
-// Normalize status — GLM uses "suggested", "proposed", "recommended", etc.
+// Normalize status — model sometimes returns "suggested", "proposed", "recommended", etc.
 function normalizeChangeStatus(raw: unknown): "rewritten" | "kept" | "confirm" {
   const s = String(raw ?? "").toLowerCase().replace(/[\s_\-]/g, "");
   if (s === "rewritten" || s === "rewrite" || s === "updated" || s === "modified") return "rewritten";
@@ -232,7 +232,7 @@ function normalizeChangeStatus(raw: unknown): "rewritten" | "kept" | "confirm" {
   return "confirm";
 }
 
-// Normalize seniorityMatch — GLM sometimes returns a full sentence instead of the enum value
+// Normalize seniorityMatch — model sometimes returns a full sentence instead of the enum value
 function normalizeSeniorityMatch(raw: unknown): "perfect" | "stretch" | "overqualified" {
   const s = String(raw ?? "").toLowerCase();
   if (s.startsWith("perfect") || s === "match" || s === "ideal") return "perfect";
@@ -240,7 +240,7 @@ function normalizeSeniorityMatch(raw: unknown): "perfect" | "stretch" | "overqua
   return "stretch";
 }
 
-// Normalize skillGaps arrays — GLM sometimes returns booleans or mixed types instead of strings
+// Normalize skillGaps arrays — model sometimes returns booleans or mixed types instead of strings
 function normalizeSkillGapArray(arr: unknown): string[] {
   if (!Array.isArray(arr)) return [];
   return arr.filter((v) => typeof v === "string" && v.trim().length > 0).map((v) => String(v).trim());
