@@ -35,7 +35,7 @@ STRICT RULES — you must follow these without exception:
 10. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-const MAX_RESUME_PARSE_CHARS = 24000;
+const MAX_RESUME_PARSE_CHARS = 15000;
 
 function cleanJsonText(text: string): string {
   return text
@@ -518,7 +518,7 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_tokens: 8192,
+      max_tokens: 4096,
       messages: [
         {
           role: "system",
@@ -572,7 +572,7 @@ RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
         },
       ],
-    });
+    }, { signal: AbortSignal.timeout(60_000) });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = parseJsonObject<Record<string, unknown>>(raw);
@@ -592,7 +592,12 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
     return res.json(parsed);
   } catch (aiErr) {
     logger.error({ aiErr }, "AI resume parsing failed");
-    return res.status(500).json({ error: "AI parsing failed. Please try again." });
+    const isTimeout = (aiErr as { name?: string })?.name === "TimeoutError" || /timeout/i.test((aiErr as { message?: string })?.message ?? "");
+    return res.status(500).json({
+      error: isTimeout
+        ? "Resume parsing timed out. Please try again."
+        : "AI parsing failed. Please try again.",
+    });
   }
 });
 
