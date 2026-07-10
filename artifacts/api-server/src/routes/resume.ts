@@ -12,7 +12,7 @@ import { consumeResumeCredit, InsufficientCreditsError, refundResumeCredit } fro
 
 const router = Router();
 
-const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL ?? "glm-5.2";
+const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL ?? "kimi-k2.6";
 const openai = new OpenAI({
   apiKey: process.env.DIGITALOCEAN_TOKEN ?? "missing-api-key",
   baseURL: "https://inference.do-ai.run/v1",
