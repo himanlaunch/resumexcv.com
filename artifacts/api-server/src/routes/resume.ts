@@ -37,6 +37,26 @@ STRICT RULES — you must follow these without exception:
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const MAX_RESUME_PARSE_CHARS = 20000;
 
+// Retry an async fn up to maxRetries times on transient 5xx errors from the AI API.
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      lastErr = err;
+      const status = (err as { status?: number })?.status ?? (err as { statusCode?: number })?.statusCode;
+      const isRetryable = status !== undefined && status >= 500 && status < 600;
+      if (isRetryable && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 // Collapse whitespace noise so the character budget is spent on actual content.
 // Removes horizontal rules, collapses blank lines (3+ → 1), trims trailing spaces per line.
 function normalizeResumeInput(raw: string): string {
@@ -528,7 +548,7 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   }
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await withRetry(() => openai.chat.completions.create({
       model: DEPLOYMENT,
       max_tokens: 4096,
       messages: [
@@ -584,7 +604,7 @@ RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
         },
       ],
-    }, { signal: AbortSignal.timeout(60_000) });
+    }, { signal: AbortSignal.timeout(60_000) }));
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = parseJsonObject<Record<string, unknown>>(raw);
@@ -603,8 +623,11 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
     ).catch(() => {});
     return res.json(parsed);
   } catch (aiErr) {
-    logger.error({ aiErr }, "AI resume parsing failed");
-    const isTimeout = (aiErr as { name?: string })?.name === "TimeoutError" || /timeout/i.test((aiErr as { message?: string })?.message ?? "");
+    const errStatus = (aiErr as { status?: number })?.status ?? (aiErr as { statusCode?: number })?.statusCode;
+    const errMsg = (aiErr as { message?: string })?.message ?? String(aiErr);
+    const errName = (aiErr as { name?: string })?.name;
+    logger.error({ errStatus, errName, errMsg }, "AI resume parsing failed");
+    const isTimeout = errName === "TimeoutError" || /timeout/i.test(errMsg);
     return res.status(500).json({
       error: isTimeout
         ? "Resume parsing timed out. Please try again."
