@@ -16,9 +16,6 @@ const pinoHttp = pinoHttpModule as unknown as (options: {
 
 const app = express();
 
-// Trust Vercel's reverse proxy so express-rate-limit can read X-Forwarded-For correctly
-app.set("trust proxy", 1);
-
 app.use(
   pinoHttp({
     logger,
@@ -87,11 +84,10 @@ const tailorLimiter = rateLimit({
   skip: () => false,
 });
 
-// /api/resume/parse — PDF upload: 30 per minute per user/IP
+// /api/resume/parse — PDF upload: 30 per minute per IP
 const parseLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,
-  keyGenerator: rateLimitKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: rateLimitResponse("RATE_LIMITED_PARSE"),

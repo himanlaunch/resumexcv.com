@@ -568,70 +568,6 @@ router.get("/autocomplete", async (req, res) => {
   }
 });
 
-// ── JSON-LD structured data extraction ───────────────────────────────────────
-// Many job boards (LinkedIn, Indeed, Greenhouse, Lever, Workday, jobr.pro, etc.)
-// embed the FULL job description in <script type="application/ld+json"> even when
-// the visible UI hides it behind a "Show more" button. This always wins over raw
-// HTML text extraction because it bypasses JS-rendered truncation entirely.
-interface JobPostingSchema {
-  "@type"?: string;
-  title?: string;
-  description?: string;
-  hiringOrganization?: { name?: string } | string;
-  jobLocation?: { address?: { addressLocality?: string; addressRegion?: string; addressCountry?: string } } | { address?: string };
-}
-
-function extractJsonLdJobPosting(html: string): { description: string; title: string; company: string; location: string } | null {
-  const scriptRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = scriptRe.exec(html)) !== null) {
-    try {
-      const raw = JSON.parse(match[1]);
-      const candidates: JobPostingSchema[] = Array.isArray(raw) ? raw : raw["@graph"] ? raw["@graph"] : [raw];
-      for (const node of candidates) {
-        if (node["@type"] === "JobPosting" && node.description) {
-          // Strip any HTML tags inside the description field (some sites embed HTML)
-          const desc = node.description
-            .replace(/<[^>]+>/g, " ")
-            .replace(/&amp;/g, "&")
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .replace(/&nbsp;/g, " ")
-            .replace(/&#\d+;/g, " ")
-            .replace(/\s{2,}/g, " ")
-            .trim();
-          const org = node.hiringOrganization;
-          const company = typeof org === "string" ? org : org?.name ?? "";
-          const loc = node.jobLocation as any;
-          const addr = loc?.address ?? loc?.[0]?.address;
-          const location = addr
-            ? [addr.addressLocality, addr.addressRegion, addr.addressCountry].filter(Boolean).join(", ")
-            : "";
-          return { description: desc, title: node.title ?? "", company, location };
-        }
-      }
-    } catch {
-      // Malformed JSON-LD — skip
-    }
-  }
-  return null;
-}
-
-function stripHtmlToText(html: string, maxChars = 8000): string {
-  return html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#\d+;/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim()
-    .slice(0, maxChars);
-}
-
 // GET /api/jobs/scrape?url=<job_url>
 // Scrapes a job posting page for full description
 router.get("/scrape", async (req, res) => {
@@ -658,26 +594,24 @@ router.get("/scrape", async (req, res) => {
       }
     }
 
-    // Direct fetch — try JSON-LD first (full description without JS), then HTML text
+    // Fallback: direct fetch + basic text extraction
     const pageResp = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; ResumeX100/1.0; +https://resumex100.com)",
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(8000),
     });
 
     const html = await pageResp.text();
+    // Strip tags, collapse whitespace — lightweight extraction without cheerio
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .slice(0, 4000);
 
-    // JSON-LD gives us the full description even when the UI hides it behind "Show more"
-    const jsonLd = extractJsonLdJobPosting(html);
-    if (jsonLd?.description && jsonLd.description.length > 200) {
-      return res.json({ description: jsonLd.description, applyLinks: [] });
-    }
-
-    // Fallback: strip HTML tags, limit to 8000 chars
-    const text = stripHtmlToText(html, 8000);
     return res.json({ description: text, applyLinks: [] });
   } catch (err) {
     logger.error({ err }, "Scrape error");
@@ -810,7 +744,6 @@ router.post("/from-url", async (req, res) => {
 
   let pageText = "";
   let pageTitle = "";
-  let jsonLdJob: { description: string; title: string; company: string; location: string } | null = null;
 
   try {
     const pageResp = await fetch(url, {
@@ -825,46 +758,28 @@ router.post("/from-url", async (req, res) => {
     if (pageResp.ok) {
       const html = await pageResp.text();
       pageTitle = (/<title[^>]*>([^<]+)<\/title>/i.exec(html)?.[1] ?? "").trim();
-
-      // JSON-LD structured data gives the FULL description even when UI hides it behind "Show more"
-      jsonLdJob = extractJsonLdJobPosting(html);
-
-      // Also extract plain text as fallback (increased to 8000 chars)
-      pageText = stripHtmlToText(html, 8000);
+      pageText = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .slice(0, 5000);
     }
   } catch {
     // Network error — fall through to slug-only path
   }
 
-  // If JSON-LD has the full description, skip the LLM extraction call for description
-  // but still call LLM if title/company/location are missing
-  const hasJsonLdDescription = (jsonLdJob?.description?.length ?? 0) > 200;
-
   // If page text is too thin (SPA shell / login wall / network error), skip AI and use slug
-  const pageHasContent = pageText.length > 300 || hasJsonLdDescription;
+  const pageHasContent = pageText.length > 300;
 
   let extracted: { title?: string; company?: string; location?: string; description?: string } = {};
 
-  // Use JSON-LD fields as a strong starting point
-  if (hasJsonLdDescription) {
-    extracted = {
-      title: jsonLdJob!.title,
-      company: jsonLdJob!.company,
-      location: jsonLdJob!.location,
-      description: jsonLdJob!.description,
-    };
-  }
-
-  // Only call LLM if we still need title/company/location from the page text
-  const needsAiExtraction = pageHasContent && (!extracted.title || !extracted.company);
-  if (needsAiExtraction) {
+  if (pageHasContent) {
     try {
-      const textForAi = hasJsonLdDescription
-        ? pageText.slice(0, 2000)  // short context — just need title/company/location
-        : pageText;
       const completion = await openai.chat.completions.create({
         model: DEPLOYMENT,
-        max_tokens: 900,
+        max_completion_tokens: 900,
         messages: [
           {
             role: "system",
@@ -875,15 +790,15 @@ Return ONLY valid JSON — no markdown fences, no extra commentary.`,
             role: "user",
             content: `Page title: "${pageTitle}"
 
-Page text (up to 8000 chars):
-${textForAi}
+Page text (up to 5000 chars):
+${pageText}
 
 Extract and return JSON with exactly these fields:
 {
   "title": "<job title — e.g. 'Senior Software Engineer'>",
   "company": "<company name>",
   "location": "<location string, e.g. 'San Francisco, CA' or 'Remote'>",
-  "description": "<the actual job description: responsibilities, qualifications, requirements — up to 5000 chars>"
+  "description": "<the actual job description: responsibilities, qualifications, requirements — up to 3000 chars>"
 }
 
 Rules:
@@ -891,27 +806,21 @@ Rules:
 - The description must be the job's real content — not navigation text, cookie banners, or boilerplate.`,
           },
         ],
+        response_format: { type: "json_object" },
       });
 
       const raw = completion.choices[0]?.message?.content ?? "{}";
-      const aiExtracted = JSON.parse(raw);
-      // Merge: JSON-LD description wins; AI fills in missing title/company/location
-      extracted = {
-        title: extracted.title || aiExtracted.title,
-        company: extracted.company || aiExtracted.company,
-        location: extracted.location || aiExtracted.location,
-        description: extracted.description || aiExtracted.description,
-      };
+      extracted = JSON.parse(raw);
     } catch (aiErr) {
       logger.warn({ aiErr }, "from-url AI extraction failed — using slug fallback");
     }
   }
 
-  // Merge: prefer extracted fields, fall back to slug-parsed values
+  // Merge: prefer AI-extracted fields, fall back to slug-parsed values
   const title = extracted.title || slugFallback.title;
   const company = extracted.company || slugFallback.company;
   const location = extracted.location || slugFallback.location;
-  const description = extracted.description || pageText.slice(0, 1200) || "";
+  const description = extracted.description || pageText.slice(0, 800) || "";
 
   if (!title && !company) {
     return res.status(422).json({ error: "Could not extract job information from this page. Make sure it is a public job posting URL." });
