@@ -551,9 +551,17 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
       [fileHash, JSON.stringify(parsed)]
     ).catch(() => {});
     return res.json(parsed);
-  } catch (aiErr) {
-    logger.error({ aiErr }, "AI resume parsing failed");
-    return res.status(500).json({ error: "AI parsing failed. Please try again." });
+  } catch (aiErr: any) {
+    logger.error({
+      aiErrStatus: aiErr?.status,
+      aiErrMessage: aiErr?.message,
+      aiErrBody: typeof aiErr?.error === "object" ? JSON.stringify(aiErr.error) : aiErr?.error,
+      model: DEPLOYMENT,
+    }, "AI resume parsing failed");
+    const userMsg = aiErr?.status === 403
+      ? "AI service rejected the request (403). Check that DIGITALOCEAN_MODEL is set to a valid model slug."
+      : "AI parsing failed. Please try again.";
+    return res.status(500).json({ error: userMsg });
   }
 });
 
