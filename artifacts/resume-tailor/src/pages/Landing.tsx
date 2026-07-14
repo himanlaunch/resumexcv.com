@@ -123,7 +123,6 @@ interface PricingPlan {
 }
 
 const PRICING: PricingPlan[] = [
-  { id: null, credits: 10, price: "Free", label: "First 10 Resumes Free", popular: false },
   { id: null, credits: 30, price: "$9.99", label: "30 resume credits", popular: true },
   { id: null, credits: 100, price: "$19.99", label: "100 resume credits", popular: false },
 ];
@@ -135,21 +134,20 @@ function normalizePricingPlans(prices?: PricingPlan[]) {
   const hundredCreditPlan = paidPlans.find((plan) => plan.credits === 100);
 
   return [
-    PRICING[0],
     {
-      ...PRICING[1],
-      id: thirtyCreditPlan?.id ?? PRICING[1].id,
-      price: thirtyCreditPlan?.price && thirtyCreditPlan.price !== "Batch" ? thirtyCreditPlan.price : PRICING[1].price,
-      label: thirtyCreditPlan?.label ?? PRICING[1].label,
-      popular: thirtyCreditPlan?.popular ?? PRICING[1].popular,
+      ...PRICING[0],
+      id: thirtyCreditPlan?.id ?? PRICING[0].id,
+      price: thirtyCreditPlan?.price && thirtyCreditPlan.price !== "Batch" ? thirtyCreditPlan.price : PRICING[0].price,
+      label: thirtyCreditPlan?.label ?? PRICING[0].label,
+      popular: thirtyCreditPlan?.popular ?? PRICING[0].popular,
       savings: thirtyCreditPlan?.savings,
     },
     {
-      ...PRICING[2],
-      id: hundredCreditPlan?.id ?? PRICING[2].id,
-      price: hundredCreditPlan?.price && hundredCreditPlan.price !== "Batch" ? hundredCreditPlan.price : PRICING[2].price,
-      label: hundredCreditPlan?.label ?? PRICING[2].label,
-      popular: hundredCreditPlan?.popular ?? PRICING[2].popular,
+      ...PRICING[1],
+      id: hundredCreditPlan?.id ?? PRICING[1].id,
+      price: hundredCreditPlan?.price && hundredCreditPlan.price !== "Batch" ? hundredCreditPlan.price : PRICING[1].price,
+      label: hundredCreditPlan?.label ?? PRICING[1].label,
+      popular: hundredCreditPlan?.popular ?? PRICING[1].popular,
       savings: hundredCreditPlan?.savings,
     },
   ];
@@ -207,7 +205,7 @@ function HeroSection() {
       }} />
       <div className="max-w-6xl mx-auto w-full">
         <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
-          <div className="animate-slide-up min-w-0">
+          <div className="min-w-0">
             <div className="chip-mint inline-flex max-w-full flex-wrap mb-5">
               <Sparkles className="w-3 h-3" style={{ color: "#00F0A0" }} />
               Parallel resume tailoring for real job searches
@@ -223,13 +221,12 @@ function HeroSection() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3 mb-8">
               <Link href="/app" className="btn-mint w-full sm:w-auto justify-center text-center" style={{ fontSize: "1rem", padding: "0.75rem 1.25rem" }}>
-                Tailor My First 10 Resumes Free <ArrowRight className="w-4 h-4" />
+                Start Tailoring Resumes <ArrowRight className="w-4 h-4" />
               </Link>
               <a href="#how-it-works" className="btn-outline-dark w-full sm:w-auto justify-center text-center" style={{ fontSize: "1rem", padding: "0.75rem 1.25rem" }}>
                 See how it works
               </a>
             </div>
-            <p className="text-sm" style={{ color: "#888" }}>Tailor up to 10 resumes free. No card required.</p>
           </div>
 
           <div className="relative animate-fade-in min-w-0 w-full">
@@ -537,10 +534,6 @@ function PricingSection() {
   }, []);
 
   const startCheckout = async (plan: PricingPlan) => {
-    if (plan.credits === 5) {
-      window.location.href = "/app";
-      return;
-    }
     if (!plan.id) {
       setCheckoutError("Stripe checkout is not ready yet. Please try again in a moment.");
       return;
@@ -574,19 +567,15 @@ function PricingSection() {
             Pay for outcomes,<br />not seats.
           </h2>
           <p className="text-lg" style={{ color: "#999" }}>
-            Start with 10 tailored resumes free, then buy 30 or 100 credits when you need more.
+            Buy 30 or 100 credits and tailor resumes at the scale your job search needs.
           </p>
         </div>
-        <div className="grid md:grid-cols-3 gap-4 max-w-5xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-4 max-w-3xl mx-auto">
           {plans.map((p, i) => {
-            const isPaid = p.credits !== 5;
-            const isOpeningCheckout = isPaid && checkoutPriceId !== null && checkoutPriceId === p.id;
-            const isFree = p.credits === 5;
+            const isOpeningCheckout = checkoutPriceId !== null && checkoutPriceId === p.id;
             return (
               <div key={i} className="relative overflow-hidden rounded-2xl p-5" style={{
-                background: isFree
-                  ? "linear-gradient(145deg, #45E6A0 0%, #22D887 100%)"
-                  : "linear-gradient(145deg, #52F2AA 0%, #22D887 100%)",
+                background: "linear-gradient(145deg, #52F2AA 0%, #22D887 100%)",
                 border: "1px solid rgba(255,255,255,0.16)",
                 boxShadow: p.popular ? "0 18px 50px rgba(0,240,160,0.22)" : "0 14px 36px rgba(0,0,0,0.18)",
               }}>
@@ -602,9 +591,7 @@ function PricingSection() {
                   </div>
                 </div>
                 <div className="text-sm font-medium mb-4 min-h-[2.5rem]" style={{ color: "#064E3B" }}>
-                  {p.credits === 5
-                    ? "No card required. Upload your resume and generate your first tailored batch."
-                    : `Use credits across one or more batches, up to ${p.credits} tailored resumes.`}
+                  {`Use credits across one or more batches, up to ${p.credits} tailored resumes.`}
                 </div>
                 <button
                   type="button"
@@ -613,7 +600,7 @@ function PricingSection() {
                   className="btn-dark w-full"
                   style={{ justifyContent: "center", display: "flex", opacity: isOpeningCheckout ? 0.7 : 1, minHeight: 42, padding: "0.55rem 1rem" }}
                 >
-                  {isOpeningCheckout ? "Opening Stripe..." : p.credits === 5 ? "Start free" : "Buy Now"}
+                  {isOpeningCheckout ? "Opening Stripe..." : "Buy Now"}
                 </button>
               </div>
             );
@@ -642,7 +629,7 @@ function CTASection() {
           Apply at the scale your job search actually needs.
         </p>
         <Link href="/app" className="btn-dark" style={{ fontSize: "1.05rem", padding: "0.85rem 2.5rem" }}>
-          Generate My First Batch Free <ArrowRight className="w-5 h-5" />
+          Start Tailoring Resumes <ArrowRight className="w-5 h-5" />
         </Link>
       </div>
     </section>
