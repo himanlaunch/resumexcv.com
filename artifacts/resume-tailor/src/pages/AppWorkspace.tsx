@@ -270,14 +270,14 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits,
           <div className="mt-3 rounded-xl p-3" style={{ backgroundColor: "rgba(0,240,160,0.08)", border: "1px solid rgba(0,240,160,0.22)" }}>
             <div className="flex items-center gap-1.5 mb-1">
               <Zap className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#00F0A0" }} />
-              <span className="text-xs font-bold" style={{ color: "#00F0A0" }}>10 FREE credits — limited promo</span>
+              <span className="text-xs font-bold" style={{ color: "#00F0A0" }}>Tailor resumes to any job</span>
             </div>
-            <p className="text-xs mb-2.5" style={{ color: "#8B949E" }}>Sign in to claim 10 free resume tailoring credits. No card required.</p>
+            <p className="text-xs mb-2.5" style={{ color: "#8B949E" }}>Sign in and buy credits to start tailoring resumes to jobs.</p>
             <Link href="/signin"
               className="block w-full text-center text-xs font-bold py-2 rounded-lg transition-opacity hover:opacity-90"
               style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}
             >
-              Sign in &amp; claim credits
+              Sign in
             </Link>
           </div>
         ) : (
@@ -514,7 +514,7 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
 
   if (!open) return null;
   const paidPlans = plans
-    .filter(plan => plan.credits >= 10)
+    .filter(plan => plan.credits >= 30)
     .sort((a, b) => a.credits - b.credits)
     .slice(0, 2);
   const displayPlans = paidPlans.length > 0
@@ -5140,14 +5140,14 @@ export default function AppWorkspace() {
             <div className="flex items-center gap-2 min-w-0">
               <Zap className="w-4 h-4 flex-shrink-0" style={{ color: "#00F0A0" }} />
               <span className="text-sm font-semibold" style={{ color: "#A7F3D0" }}>
-                Limited promo: Sign in to get <strong style={{ color: "#00F0A0" }}>10 free resume credits</strong> — no card required.
+                Sign in to tailor resumes to any job with <strong style={{ color: "#00F0A0" }}>AI-powered customization</strong>.
               </span>
             </div>
             <Link href="/signin"
               className="flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-90"
               style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}
             >
-              Sign in free
+              Sign in
             </Link>
           </div>
         )}
@@ -5177,11 +5177,11 @@ export default function AppWorkspace() {
                       </div>
                       <h2 className="font-heading font-bold text-xl mb-2" style={{ color: "#0A0A0A" }}>Sign in to tailor your resume</h2>
                       <p className="text-sm mb-1" style={{ color: "#666" }}>
-                        Create a free account and get <strong>10 resume credits</strong> — enough to tailor 10 jobs.
+                        Sign in and buy credits to tailor resumes to every job you apply for.
                       </p>
-                      <p className="text-xs mb-6" style={{ color: "#9CA3AF" }}>No credit card required. Limited promo offer.</p>
+                      <p className="text-xs mb-6" style={{ color: "#9CA3AF" }}>30 credits for $9.99 or 100 credits for $19.99.</p>
                       <Link href="/signin" className="btn-mint inline-flex items-center gap-2">
-                        Sign in &amp; claim 10 free credits <ArrowRight className="w-4 h-4" />
+                        Sign in to get started <ArrowRight className="w-4 h-4" />
                       </Link>
                     </div>
                   </div>
