@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Upload, Search, CheckSquare, ArrowRight,
   Shield, Zap, Target, ChevronRight,
-  Check, X, Sparkles, FileText, Layers, ListChecks, Menu
+  Check, X, Sparkles, FileText, Layers, ListChecks
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { createCheckout } from "@/lib/api";
@@ -124,8 +124,8 @@ interface PricingPlan {
 
 const PRICING: PricingPlan[] = [
   { id: null, credits: 10, price: "Free", label: "First 10 Resumes Free", popular: false },
-  { id: null, credits: 30, price: "$10.00", label: "30 resume credits", popular: true },
-  { id: null, credits: 100, price: "$20.00", label: "100 resume credits", popular: false },
+  { id: null, credits: 30, price: "$9.99", label: "30 resume credits", popular: true },
+  { id: null, credits: 100, price: "$19.99", label: "100 resume credits", popular: false },
 ];
 
 function normalizePricingPlans(prices?: PricingPlan[]) {
@@ -155,29 +155,8 @@ function normalizePricingPlans(prices?: PricingPlan[]) {
   ];
 }
 
-function useScrollReveal() {
-  useEffect(() => {
-    const els = document.querySelectorAll(".reveal, .reveal-left, .reveal-right");
-    if (!els.length) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("is-visible");
-            io.unobserve(e.target);
-          }
-        });
-      },
-      { threshold: 0.1, rootMargin: "0px 0px -48px 0px" }
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
-}
-
 function NavBar() {
   const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", onScroll);
@@ -188,9 +167,9 @@ function NavBar() {
     <nav
       className="fixed top-0 left-0 right-0 z-50 transition-all duration-200"
       style={{
-        backgroundColor: scrolled || mobileOpen ? "rgba(242,244,245,0.97)" : "transparent",
-        backdropFilter: scrolled || mobileOpen ? "blur(12px)" : "none",
-        borderBottom: scrolled || mobileOpen ? "1px solid #E5E8EA" : "none",
+        backgroundColor: scrolled ? "rgba(242,244,245,0.95)" : "transparent",
+        backdropFilter: scrolled ? "blur(12px)" : "none",
+        borderBottom: scrolled ? "1px solid #E5E8EA" : "none",
       }}
     >
       <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 h-14 md:h-16 flex items-center justify-between gap-3">
@@ -214,30 +193,8 @@ function NavBar() {
             Sign In
           </Link>
           <Link href="/app" className="btn-mint text-xs sm:text-sm" style={{ padding: "0.45rem 0.75rem", minHeight: 40 }}>Start Free</Link>
-          <button
-            className="flex md:hidden w-10 h-10 items-center justify-center rounded-full transition-colors"
-            style={{ color: "#0A0A0A" }}
-            onClick={() => setMobileOpen(v => !v)}
-            aria-label="Toggle navigation"
-          >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
         </div>
       </div>
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <div className="md:hidden px-4 pb-5 pt-1 flex flex-col gap-1" style={{ borderTop: "1px solid #E5E8EA" }}>
-          {NAV_LINKS.map((l) => (
-            <a key={l.label} href={l.href} onClick={() => setMobileOpen(false)}
-              className="text-sm font-semibold py-3 px-2 rounded-xl"
-              style={{ color: "#0A0A0A" }}
-            >{l.label}</a>
-          ))}
-          <Link href="/signin" onClick={() => setMobileOpen(false)}
-            className="btn-outline-dark w-full mt-2 text-center"
-          >Sign In</Link>
-        </div>
-      )}
     </nav>
   );
 }
@@ -332,41 +289,22 @@ function HeroSection() {
 
 function ProblemShiftSection() {
   return (
-    <section className="py-16 md:py-24 px-4 md:px-6" style={{ backgroundColor: "#fff" }}>
-      <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-6 md:gap-8">
-        <div
-          className="reveal-left p-8 md:p-12 relative overflow-hidden"
-          style={{
-            backgroundColor: "#0A0A0A",
-            color: "#fff",
-            borderRadius: 24,
-            boxShadow: "0 2px 4px rgba(0,0,0,0.3), 0 8px 32px rgba(0,0,0,0.25), 0 32px 64px -16px rgba(0,0,0,0.4)",
-          }}
-        >
-          {/* Subtle green radial glow in corner */}
-          <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 rounded-full" style={{ background: "radial-gradient(circle, rgba(0,240,160,0.08) 0%, transparent 70%)" }} />
-          <div className="chip-mint inline-flex mb-6">The problem</div>
-          <h2 className="font-heading font-bold text-3xl sm:text-4xl md:text-5xl mb-5" style={{ textWrap: "balance" } as React.CSSProperties}>
+    <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#fff" }}>
+      <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
+        <div className="p-8 md:p-10 rounded-2xl" style={{ backgroundColor: "#0A0A0A", color: "#fff" }}>
+          <div className="chip-mint inline-flex mb-5">The problem</div>
+          <h2 className="font-heading font-bold text-4xl md:text-5xl mb-5">
             One resume. A hundred rejections.
           </h2>
-          <p className="text-base md:text-lg leading-relaxed" style={{ color: "#A0AEB8" }}>
+          <p className="text-base md:text-lg leading-relaxed" style={{ color: "#D1D5DB" }}>
             You're not under-qualified. You're under-tailored. Recruiters and ATS systems are trained to spot generic.
-            Hand-tailoring one resume per job takes 20–30 minutes. Multiply that by the 50+ applications a real
+            Hand-tailoring one resume per job takes 20-30 minutes. Multiply that by the 50+ applications a real
             job search requires, and most people quit tailoring by application #4.
           </p>
         </div>
-        <div
-          className="reveal-right p-8 md:p-12 relative overflow-hidden"
-          style={{
-            backgroundColor: "#F0FFF8",
-            border: "1px solid rgba(0,240,160,0.3)",
-            borderRadius: 24,
-            boxShadow: "0 2px 4px rgba(0,240,160,0.06), 0 8px 32px rgba(0,240,160,0.08), 0 32px 64px -16px rgba(0,0,0,0.06)",
-          }}
-        >
-          <div className="pointer-events-none absolute -bottom-12 -right-12 w-56 h-56 rounded-full" style={{ background: "radial-gradient(circle, rgba(0,240,160,0.18) 0%, transparent 70%)" }} />
-          <div className="chip-mint inline-flex mb-6">The shift</div>
-          <h2 className="font-heading font-bold text-3xl sm:text-4xl md:text-5xl mb-5" style={{ color: "#0A0A0A", textWrap: "balance" } as React.CSSProperties}>
+        <div className="p-8 md:p-10 rounded-2xl" style={{ backgroundColor: "#ECFFE0", border: "1px solid rgba(0,240,160,0.35)" }}>
+          <div className="chip-mint inline-flex mb-5">The shift</div>
+          <h2 className="font-heading font-bold text-4xl md:text-5xl mb-5" style={{ color: "#0A0A0A" }}>
             What if tailoring wasn't the bottleneck?
           </h2>
           <p className="text-base md:text-lg leading-relaxed" style={{ color: "#374151" }}>
@@ -380,13 +318,11 @@ function ProblemShiftSection() {
   );
 }
 
-const REVEAL_DELAYS = ["", "reveal-d1", "reveal-d2", "reveal-d3", "reveal-d4", "reveal-d5", "reveal-d6"];
-
 function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="py-16 md:py-24 px-4 md:px-6" style={{ backgroundColor: "#F2F4F5" }}>
+    <section id="how-it-works" className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#F2F4F5" }}>
       <div className="max-w-6xl mx-auto">
-        <div className="reveal text-center mb-14">
+        <div className="text-center mb-14">
           <div className="chip-mint inline-flex mb-4">How it works</div>
           <h2 className="font-heading font-bold text-4xl md:text-5xl mb-4" style={{ color: "#0A0A0A" }}>
             Upload, target, generate.
@@ -397,18 +333,18 @@ function HowItWorksSection() {
         </div>
         <div className="grid md:grid-cols-3 gap-6">
           {HOW_IT_WORKS.map((step, i) => (
-            <div key={i} className={`tile-light reveal ${REVEAL_DELAYS[i]} p-7 relative overflow-hidden`}>
-              {/* Step number as large background watermark */}
+            <div key={i} className="card-base p-6 relative" style={{ borderRadius: 14 }}>
               <div
-                className="pointer-events-none absolute -top-3 -right-2 font-heading font-bold select-none"
-                style={{ fontSize: "7rem", lineHeight: 1, color: "rgba(0,196,71,0.08)", userSelect: "none" }}
-                aria-hidden
+                className="font-heading font-bold text-5xl mb-4"
+                style={{
+                  color: "#047857",
+                  lineHeight: 1,
+                  textShadow: "0 1px 0 rgba(255,255,255,0.75)",
+                }}
               >
                 {step.step}
               </div>
-              {/* Thin top accent stripe */}
-              <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-[20px]" style={{ background: "linear-gradient(90deg, #00F0A0 0%, transparent 100%)" }} />
-              <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857", boxShadow: "0 0 0 4px rgba(0,240,160,0.12)" }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: "#ECFFE0", color: "#0A0A0A" }}>
                 {step.icon}
               </div>
               <h3 className="font-heading font-bold text-lg mb-2" style={{ color: "#0A0A0A" }}>{step.title}</h3>
@@ -430,7 +366,7 @@ function FeaturesSection() {
   return (
     <section id="features" className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#0A0A0A" }}>
       <div className="max-w-6xl mx-auto">
-        <div className="reveal text-center mb-14">
+        <div className="text-center mb-14">
           <div className="chip-mint inline-flex mb-4">Why it is different</div>
           <h2 className="font-heading font-bold text-4xl md:text-5xl mb-4" style={{ color: "#fff" }}>
             Built for volume without losing depth.
@@ -442,12 +378,12 @@ function FeaturesSection() {
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {FEATURES.map((f, i) => (
-            <div key={i} className={`tile-dark reveal ${REVEAL_DELAYS[i % 6]} p-7`}>
-              <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-5" style={{ backgroundColor: "rgba(0,240,160,0.1)", color: "#00F0A0", boxShadow: "0 0 0 4px rgba(0,240,160,0.06), inset 0 1px 0 rgba(0,240,160,0.12)" }}>
+            <div key={i} className="p-6 rounded-2xl" style={{ backgroundColor: "#161616", border: "1px solid #222" }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: "rgba(0,240,160,0.1)", color: "#00F0A0" }}>
                 {f.icon}
               </div>
-              <h3 className="font-heading font-bold text-base mb-2.5" style={{ color: "#fff" }}>{f.title}</h3>
-              <p className="text-sm leading-relaxed" style={{ color: "#7A8A94" }}>{f.desc}</p>
+              <h3 className="font-heading font-bold text-base mb-2" style={{ color: "#fff" }}>{f.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: "#888" }}>{f.desc}</p>
             </div>
           ))}
         </div>
@@ -460,7 +396,7 @@ function ComparisonSection() {
   return (
     <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#F2F4F5" }}>
       <div className="max-w-3xl mx-auto">
-        <div className="reveal text-center mb-12">
+        <div className="text-center mb-12">
           <h2 className="font-heading font-bold text-4xl md:text-5xl mb-4" style={{ color: "#0A0A0A" }}>
             Real batch tailoring,<br />not a template spinner.
           </h2>
@@ -502,7 +438,7 @@ function TestimonialsSection() {
       {/* Social proof: real testimonials */}
       <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#fff" }}>
         <div className="max-w-6xl mx-auto">
-          <div className="reveal text-center mb-12">
+          <div className="text-center mb-12">
             <div className="chip-mint inline-flex mb-4">Real results</div>
             <h2 className="font-heading font-bold text-4xl md:text-5xl mb-4" style={{ color: "#0A0A0A" }}>
               From zero callbacks to multiple offers.
@@ -513,17 +449,15 @@ function TestimonialsSection() {
           </div>
           <div className="grid md:grid-cols-2 gap-5">
             {TESTIMONIALS.map((t, i) => (
-              <div key={i} className={`tile-light reveal ${REVEAL_DELAYS[i % 4]} p-7 md:p-8 flex flex-col gap-4 relative overflow-hidden`}>
-                {/* Decorative quote mark */}
-                <div className="pointer-events-none absolute top-4 right-5 font-heading font-bold select-none" style={{ fontSize: "5rem", lineHeight: 1, color: "rgba(0,196,71,0.07)" }} aria-hidden>&ldquo;</div>
+              <div key={i} className="card-base p-6 md:p-7 rounded-2xl flex flex-col gap-4">
                 <div className="inline-flex self-start px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
                   {t.highlight}
                 </div>
                 <blockquote className="text-sm md:text-base leading-relaxed flex-1" style={{ color: "#444" }}>
-                  &ldquo;{t.quote}&rdquo;
+                  "{t.quote}"
                 </blockquote>
-                <div className="flex items-center gap-3 pt-3" style={{ borderTop: "1px solid #F0F0F0" }}>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ backgroundColor: "#00c447", boxShadow: "0 0 0 3px rgba(0,196,71,0.15)" }}>
+                <div className="flex items-center gap-3 pt-2" style={{ borderTop: "1px solid #F0F0F0" }}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ backgroundColor: "#00c447" }}>
                     {t.name.charAt(0)}
                   </div>
                   <div>
@@ -540,7 +474,7 @@ function TestimonialsSection() {
       {/* Trust and control */}
       <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#F2F4F5" }}>
         <div className="max-w-6xl mx-auto">
-          <div className="reveal text-center mb-12">
+          <div className="text-center mb-12">
             <div className="chip-mint inline-flex mb-4">Trust and control</div>
             <h2 className="font-heading font-bold text-4xl mb-4" style={{ color: "#0A0A0A" }}>
               You're still in control.
@@ -550,8 +484,8 @@ function TestimonialsSection() {
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-6">
-            <div className="tile-light reveal p-8">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857", boxShadow: "0 0 0 4px rgba(0,240,160,0.12)" }}>
+            <div className="card-base p-8" style={{ borderRadius: 16 }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
                 <Shield className="w-6 h-6" />
               </div>
               <h3 className="font-heading font-bold text-2xl mb-3" style={{ color: "#0A0A0A" }}>Every change is visible.</h3>
@@ -560,8 +494,8 @@ function TestimonialsSection() {
                 ResumeX100 never auto-submits anything you have not reviewed.
               </p>
             </div>
-            <div className="tile-light reveal reveal-d1 p-8">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857", boxShadow: "0 0 0 4px rgba(0,240,160,0.12)" }}>
+            <div className="card-base p-8" style={{ borderRadius: 16 }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-5" style={{ backgroundColor: "#ECFFE0", color: "#047857" }}>
                 <Sparkles className="w-6 h-6" />
               </div>
               <h3 className="font-heading font-bold text-2xl mb-3" style={{ color: "#0A0A0A" }}>Built on real AI, not templates.</h3>
@@ -634,7 +568,7 @@ function PricingSection() {
   return (
     <section id="pricing" className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#0A0A0A" }}>
       <div className="max-w-4xl mx-auto">
-        <div className="reveal text-center mb-12">
+        <div className="text-center mb-12">
           <div className="chip-mint inline-flex mb-4">Simple, honest pricing</div>
           <h2 className="font-heading font-bold text-4xl md:text-5xl mb-4" style={{ color: "#fff" }}>
             Pay for outcomes,<br />not seats.
@@ -649,7 +583,7 @@ function PricingSection() {
             const isOpeningCheckout = isPaid && checkoutPriceId !== null && checkoutPriceId === p.id;
             const isFree = p.credits === 5;
             return (
-              <div key={i} className={`reveal ${REVEAL_DELAYS[i]} relative overflow-hidden rounded-[20px] p-5`} style={{
+              <div key={i} className="relative overflow-hidden rounded-2xl p-5" style={{
                 background: isFree
                   ? "linear-gradient(145deg, #45E6A0 0%, #22D887 100%)"
                   : "linear-gradient(145deg, #52F2AA 0%, #22D887 100%)",
@@ -700,14 +634,14 @@ function PricingSection() {
 function CTASection() {
   return (
     <section className="py-16 md:py-20 px-4 md:px-6" style={{ backgroundColor: "#00F0A0" }}>
-      <div className="reveal max-w-2xl mx-auto text-center">
+      <div className="max-w-2xl mx-auto text-center">
         <h2 className="font-heading font-bold text-4xl md:text-5xl mb-5" style={{ color: "#0A0A0A" }}>
           Stop hand-tailoring one resume at a time.
         </h2>
         <p className="text-lg mb-8" style={{ color: "rgba(0,0,0,0.65)" }}>
           Apply at the scale your job search actually needs.
         </p>
-        <Link href="/app" className="btn-dark w-full sm:w-auto" style={{ fontSize: "1.05rem", padding: "0.85rem 2.5rem" }}>
+        <Link href="/app" className="btn-dark" style={{ fontSize: "1.05rem", padding: "0.85rem 2.5rem" }}>
           Generate My First Batch Free <ArrowRight className="w-5 h-5" />
         </Link>
       </div>
@@ -722,7 +656,7 @@ function Footer() {
         <div className="flex items-center">
           <BrandLogo onDark imageClassName="h-9" />
         </div>
-        <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm" style={{ color: "#666" }}>
+        <div className="flex gap-6 text-sm" style={{ color: "#666" }}>
           <a href="#features" style={{ color: "#666" }} onMouseEnter={e => (e.currentTarget.style.color = "#fff")} onMouseLeave={e => (e.currentTarget.style.color = "#666")}>Features</a>
           <a href="#pricing" style={{ color: "#666" }} onMouseEnter={e => (e.currentTarget.style.color = "#fff")} onMouseLeave={e => (e.currentTarget.style.color = "#666")}>Pricing</a>
           <Link href="/blog" style={{ color: "#666" }}>Blog</Link>
@@ -737,7 +671,6 @@ function Footer() {
 }
 
 export default function Landing() {
-  useScrollReveal();
   return (
     <div className="min-h-screen">
       <NavBar />

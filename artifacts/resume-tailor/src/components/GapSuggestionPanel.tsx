@@ -249,7 +249,7 @@ function GapCard({
         </div>
         <button
           onClick={onDismiss}
-          className="text-xs flex items-center gap-1 hover:opacity-70 transition-opacity px-2 py-2 rounded-lg"
+          className="text-xs flex items-center gap-1 hover:opacity-70 transition-opacity"
           style={{ color: "#9CA3AF" }}
           aria-label="Dismiss this gap"
         >
@@ -320,7 +320,7 @@ function GapCard({
             <div className="flex gap-2 pt-1">
               <button
                 onClick={onAccept}
-                className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity min-h-[44px]"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
                 style={{ backgroundColor: "#00F0A0", color: "#0A0A0A" }}
               >
                 <Check className="w-3.5 h-3.5" />
@@ -328,7 +328,7 @@ function GapCard({
               </button>
               <button
                 onClick={onRetry}
-                className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity min-h-[44px]"
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
                 style={{ backgroundColor: "#F3F4F6", color: "#374151" }}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -336,7 +336,7 @@ function GapCard({
               </button>
               <button
                 onClick={onDismiss}
-                className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity min-h-[44px]"
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
                 style={{ backgroundColor: "#FEE2E2", color: "#B91C1C" }}
               >
                 <X className="w-3.5 h-3.5" />

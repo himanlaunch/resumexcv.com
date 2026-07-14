@@ -13,6 +13,7 @@ import { consumeResumeCredit, InsufficientCreditsError, refundResumeCredit } fro
 const router = Router();
 
 const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL ?? "kimi-k2.6";
+
 const openai = new OpenAI({
   apiKey: process.env.DIGITALOCEAN_TOKEN ?? "missing-api-key",
   baseURL: "https://inference.do-ai.run/v1",
@@ -35,37 +36,7 @@ STRICT RULES — you must follow these without exception:
 10. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-const MAX_RESUME_PARSE_CHARS = 20000;
-
-// Retry an async fn up to maxRetries times on transient 5xx errors from the AI API.
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err: unknown) {
-      lastErr = err;
-      const status = (err as { status?: number })?.status ?? (err as { statusCode?: number })?.statusCode;
-      const isRetryable = status !== undefined && status >= 500 && status < 600;
-      if (isRetryable && attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw lastErr;
-}
-
-// Collapse whitespace noise so the character budget is spent on actual content.
-// Removes horizontal rules, collapses blank lines (3+ → 1), trims trailing spaces per line.
-function normalizeResumeInput(raw: string): string {
-  return raw
-    .replace(/[ \t]+$/gm, "")           // trailing spaces per line
-    .replace(/^[-=_*]{4,}\s*$/gm, "")   // horizontal rules like ---- or ====
-    .replace(/\n{3,}/g, "\n\n")         // 3+ blank lines → single blank line
-    .trim();
-}
+const MAX_RESUME_PARSE_CHARS = 24000;
 
 function cleanJsonText(text: string): string {
   return text
@@ -243,62 +214,20 @@ function sanitizeResumeSkillText(value: string | null | undefined): string {
   );
 }
 
-// Normalize gapType — model sometimes returns non-standard values like "skill_gap", "alignment", "seniority_gap"
-function normalizeGapType(raw: unknown): null | "keyword" | "evidence" | "true_gap" {
-  if (raw == null || raw === "null" || raw === "" || raw === false) return null;
-  const s = String(raw).toLowerCase().replace(/[\s_\-]/g, "");
-  if (s === "truegap" || s === "missingskill" || s === "noexperience" || s === "missing" || s === "absent") return "true_gap";
-  if (s === "evidence" || s === "evidencegap" || s === "noevidence" || s === "claimed") return "evidence";
-  if (s === "keyword" || s === "keywordgap" || s === "phrasing") return "keyword";
-  // "skill_gap", "alignment", "seniority_gap", "leadership_gap" and unknown non-null values → keyword (weakest/safest)
-  return "keyword";
-}
-
-// Normalize status — model sometimes returns "suggested", "proposed", "recommended", etc.
-function normalizeChangeStatus(raw: unknown): "rewritten" | "kept" | "confirm" {
-  const s = String(raw ?? "").toLowerCase().replace(/[\s_\-]/g, "");
-  if (s === "rewritten" || s === "rewrite" || s === "updated" || s === "modified") return "rewritten";
-  if (s === "kept" || s === "keep" || s === "unchanged" || s === "retain") return "kept";
-  return "confirm";
-}
-
-// Normalize seniorityMatch — model sometimes returns a full sentence instead of the enum value
-function normalizeSeniorityMatch(raw: unknown): "perfect" | "stretch" | "overqualified" {
-  const s = String(raw ?? "").toLowerCase();
-  if (s.startsWith("perfect") || s === "match" || s === "ideal") return "perfect";
-  if (s.startsWith("overqualified") || s.includes("overqualified")) return "overqualified";
-  return "stretch";
-}
-
-// Normalize skillGaps arrays — model sometimes returns booleans or mixed types instead of strings
-function normalizeSkillGapArray(arr: unknown): string[] {
-  if (!Array.isArray(arr)) return [];
-  return arr.filter((v) => typeof v === "string" && v.trim().length > 0).map((v) => String(v).trim());
-}
-
 function sanitizeTailoringResult(result: TailoringResult): TailoringResult {
   return {
     ...result,
-    matchScore: typeof result.matchScore === "number" ? Math.min(100, Math.max(0, result.matchScore)) : 50,
-    seniorityMatch: normalizeSeniorityMatch(result.seniorityMatch),
-    skillGaps: {
-      keyword: normalizeSkillGapArray(result.skillGaps?.keyword),
-      evidence: normalizeSkillGapArray(result.skillGaps?.evidence),
-      trueGap: normalizeSkillGapArray(result.skillGaps?.trueGap),
-    },
     changes: (result.changes ?? [])
       .map((change) => {
         const proposed = change.section?.toLowerCase().includes("skill")
           ? sanitizeResumeSkillText(change.proposed)
           : sanitizeResumeText(change.proposed);
-        const gapType = normalizeGapType(change.gapType);
-        const rawStatus = normalizeChangeStatus(change.status);
         // Gap rows must always be "confirm" so the user can Accept/Retry/Reject them.
-        // Exception: Summary is always a narrative rewrite — never block it.
+        // Exception: Summary is always a narrative rewrite from existing experience — never block it.
         const isSummary = change.section?.toLowerCase() === "summary";
-        const hasGap = !isSummary && gapType != null;
-        const status = hasGap && rawStatus !== "confirm" ? "confirm" : rawStatus;
-        return { ...change, proposed, gapType, status };
+        const hasGap = !isSummary && change.gapType != null && change.gapType !== "null" && change.gapType !== "";
+        const status = hasGap && change.status !== "confirm" ? "confirm" : change.status;
+        return { ...change, proposed, status };
       })
       .filter((change) => change.proposed || change.status !== "rewritten"),
   };
@@ -474,6 +403,7 @@ Malformed JSON:
 ${malformedJson.slice(0, 50000)}`,
       },
     ],
+    response_format: { type: "json_object" },
   });
 
   const repaired = completion.choices[0]?.message?.content ?? "{}";
@@ -518,8 +448,6 @@ router.post("/parse", upload.single("file"), async (req, res) => {
     return res.status(400).json({ error: "No text found in the file. Make sure it is not a scanned-image PDF." });
   }
 
-  text = normalizeResumeInput(text);
-
   const fileHash = createHash("sha256").update(file.buffer).digest("hex");
 
   try {
@@ -548,9 +476,9 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   }
 
   try {
-    const completion = await withRetry(() => openai.chat.completions.create({
+    const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_tokens: 4096,
+      max_completion_tokens: 8192,
       messages: [
         {
           role: "system",
@@ -604,10 +532,11 @@ RESUME TEXT:
 ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
         },
       ],
-    }, { signal: AbortSignal.timeout(60_000) }));
+      response_format: { type: "json_object" },
+    });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = parseJsonObject<Record<string, unknown>>(raw);
+    const parsed = JSON.parse(raw);
     // Sanitize before returning and caching so dedup/classification always applies
     if (parsed?.resume) {
       parsed.resume = sanitizeResumeRecord(parsed.resume);
@@ -623,16 +552,8 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
     ).catch(() => {});
     return res.json(parsed);
   } catch (aiErr) {
-    const errStatus = (aiErr as { status?: number })?.status ?? (aiErr as { statusCode?: number })?.statusCode;
-    const errMsg = (aiErr as { message?: string })?.message ?? String(aiErr);
-    const errName = (aiErr as { name?: string })?.name;
-    logger.error({ errStatus, errName, errMsg }, "AI resume parsing failed");
-    const isTimeout = errName === "TimeoutError" || /timeout/i.test(errMsg);
-    return res.status(500).json({
-      error: isTimeout
-        ? "Resume parsing timed out. Please try again."
-        : "AI parsing failed. Please try again.",
-    });
+    logger.error({ aiErr }, "AI resume parsing failed");
+    return res.status(500).json({ error: "AI parsing failed. Please try again." });
   }
 });
 
@@ -723,6 +644,7 @@ router.post("/tailor", async (req, res) => {
           { role: "user", content: prompt },
         ],
         stream: true,
+        response_format: { type: "json_object" },
       },
       // Abort the streaming request if the model hasn't finished in 90s
       { signal: AbortSignal.timeout(90_000) },
@@ -856,7 +778,7 @@ router.post("/suggest-gap-experience", async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_tokens: 512,
+      max_completion_tokens: 512,
       messages: [
         {
           role: "system",
@@ -888,6 +810,7 @@ Rules:
 - Title should be neutral and honest (e.g. "Career Development", "Freelance Projects", "Independent Consulting")`,
         },
       ],
+      response_format: { type: "json_object" },
     });
 
     const text = completion.choices[0]?.message?.content ?? "{}";
@@ -925,7 +848,7 @@ router.post("/retry-change", async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_tokens: 512,
+      max_completion_tokens: 512,
       messages: [
         { role: "system", content: SYSTEM_TAILORING },
         {
@@ -945,6 +868,7 @@ The user rejected this. Generate ONE alternative suggestion that:
 Return JSON: { "proposed": "...", "rationale": "..." }`,
         },
       ],
+      response_format: { type: "json_object" },
     });
 
     const text = completion.choices[0]?.message?.content ?? "{}";
@@ -974,7 +898,7 @@ router.post("/cover-letter", async (req, res) => {
   try {
     const stream = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_tokens: 1024,
+      max_completion_tokens: 1024,
       messages: [
         {
           role: "system",
@@ -1025,7 +949,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
 
 {
   "matchScore": <number 0-100 — the PROJECTED keyword match AFTER the user accepts all your proposed changes. Aim for 85-95. This is not the current score; it is the score the resume will have once all rewrites are applied.>,
-  "seniorityMatch": "<MUST be exactly one of these three strings: perfect | stretch | overqualified>",
+  "seniorityMatch": <"perfect" | "stretch" | "overqualified">,
   "changes": [
     {
       "id": "<unique string>",
@@ -1033,24 +957,18 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
       "original": "<original text from resume or '[Not in resume]'>",
       "jobReq": "<specific requirement from job description this addresses>",
       "proposed": "<final resume-ready rewrite only; no notes, reasoning, caveats, or instructions>",
-      "status": "<MUST be exactly one of: rewritten | kept | confirm>",
-      "gapType": "<MUST be exactly one of: null | keyword | evidence | true_gap>",
-      "gapNote": "<explanation if gapType is not null, else empty string>"
+      "status": <"rewritten" | "kept" | "confirm">,
+      "gapType": <null | "keyword" | "evidence" | "true_gap">,
+      "gapNote": "<explanation if gapType is not null>"
     }
   ],
   "skillGaps": {
-    "keyword": ["<skill name as a plain string — skill is in resume but phrased differently>"],
-    "evidence": ["<skill name as a plain string — skill claimed but no supporting bullet>"],
-    "trueGap": ["<skill name as a plain string — required skill completely absent from resume>"]
+    "keyword": ["<skill in resume but phrased differently>"],
+    "evidence": ["<skill claimed but no example bullet>"],
+    "trueGap": ["<required skill completely absent from resume>"]
   },
-  "senioritySignals": ["<seniority-tone suggestion>"]
+  "senioritySignals": ["<list of seniority-tone suggestions, e.g. change 'I built' to 'Led team to build'>"]
 }
-
-ENUM VALUES — you MUST use these exact strings, nothing else:
-- seniorityMatch: "perfect" (role fits candidate level), "stretch" (candidate is junior for role), "overqualified" (candidate is senior for role)
-- status: "rewritten" (you rewrote existing content), "kept" (existing content is already good), "confirm" (new content or gap content the user must review)
-- gapType: null (no gap), "keyword" (skill present but not keyworded correctly), "evidence" (skill claimed but no bullet proves it), "true_gap" (skill completely absent)
-- skillGaps arrays MUST contain plain skill-name strings ONLY — never booleans, numbers, or objects
 
 TAILORING RULES — follow all of these:
 1. Coverage target: your proposed changes must collectively inject at least 85% of the job's important keywords into the resume. Review the job description carefully and identify every significant keyword, skill, tool, methodology, and requirement. Rewrite bullets and the summary to naturally incorporate them.
