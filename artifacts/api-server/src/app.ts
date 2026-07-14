@@ -16,6 +16,9 @@ const pinoHttp = pinoHttpModule as unknown as (options: {
 
 const app = express();
 
+// Required on Vercel: all requests arrive via proxy with X-Forwarded-For
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
