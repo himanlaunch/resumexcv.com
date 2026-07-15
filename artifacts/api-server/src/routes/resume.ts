@@ -12,7 +12,7 @@ import { consumeResumeCredit, InsufficientCreditsError, refundResumeCredit } fro
 
 const router = Router();
 
-const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL ?? "openai-gpt-5-mini";
+const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL;
 
 const openai = new OpenAI({
   apiKey: process.env.DIGITALOCEAN_TOKEN ?? "missing-api-key",
