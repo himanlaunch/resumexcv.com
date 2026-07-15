@@ -852,11 +852,17 @@ function LocationPicker({
 
 function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: { enabled: boolean; credits: CreditBalance | null; onBuyCredits: () => void; onJobsFetched: (jobs: JobResult[]) => void }) {
   const MAX_CUSTOM_URLS = 50;
+  const [mode, setMode] = useState<"urls" | "description">("urls");
   const [urlInput, setUrlInput] = useState("");
   const [urlFetchStates, setUrlFetchStates] = useState<Record<string, { status: "loading" | "done" | "error"; error?: string }>>({});
   const [urlFetching, setUrlFetching] = useState(false);
   const [error, setError] = useState("");
   const [mobileExpanded, setMobileExpanded] = useState(false);
+
+  // Description mode state
+  const [descTitle, setDescTitle] = useState("");
+  const [descCompany, setDescCompany] = useState("");
+  const [descText, setDescText] = useState("");
 
   const urlLines = urlInput
     .split(/[\n,]+/)
@@ -903,6 +909,37 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
     onJobsFetched(fetchedJobs);
   };
 
+  const handleSubmitDescription = () => {
+    if (!enabled) {
+      setError("Upload and parse your resume first.");
+      return;
+    }
+    const title = descTitle.trim();
+    const company = descCompany.trim();
+    const description = descText.trim();
+    if (!description) {
+      setError("Paste a job description to continue.");
+      return;
+    }
+    setError("");
+    const job: JobResult = {
+      id: `custom-${Date.now()}`,
+      title: title || "Job",
+      company: company || "Company",
+      location: "",
+      via: "Pasted description",
+      description,
+      highlights: [],
+      postedAt: "",
+      salary: null,
+      remote: false,
+      scheduleType: "",
+      applyLink: null,
+      source: "custom",
+    };
+    onJobsFetched([job]);
+  };
+
   return (
     <div className="card-base rounded-2xl overflow-hidden h-fit">
       <button
@@ -913,8 +950,8 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
       >
         <div className="flex items-center gap-2">
           <Link2 className="w-4 h-4" style={{ color: "#00c447" }} />
-          <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Have job links?</h3>
-          <span className="text-xs hidden md:inline" style={{ color: "#888" }}>Paste URLs to skip job search</span>
+          <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Have job links or a description?</h3>
+          <span className="text-xs hidden md:inline" style={{ color: "#888" }}>Paste URLs or job text to skip search</span>
         </div>
         <ChevronDown
           className="w-4 h-4 md:hidden transition-transform"
@@ -923,55 +960,154 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
       </button>
       <div className={mobileExpanded ? "block" : "hidden md:block"}>
       <div className="p-4 md:p-5">
-        <p className="text-xs mb-3" style={{ color: "#888" }}>
-          Paste up to {MAX_CUSTOM_URLS} job posting URLs. We will fetch the descriptions and jump straight to Review & Confirm.
-        </p>
-        <textarea
-          value={urlInput}
-          onChange={e => setUrlInput(e.target.value)}
-          disabled={!enabled || urlFetching}
-          placeholder={"https://linkedin.com/jobs/view/...\nhttps://boards.greenhouse.io/company/jobs/..."}
-          rows={4}
-          className="w-full rounded-xl p-3 text-sm resize-y outline-none font-mono"
-          style={{
-            border: "1.5px solid #D0D5DD",
-            color: enabled ? "#0A0A0A" : "#999",
-            backgroundColor: enabled ? "white" : "#F8F9FA",
-            lineHeight: 1.6,
-          }}
-        />
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-3 gap-3">
-          <p className="text-xs flex-1" style={{ color: "#888" }}>
-            {!enabled ? "Upload a resume first" : urlLines.length > 0 ? `${urlLines.length} of ${MAX_CUSTOM_URLS} URLs ready` : "Paste one URL per line"}
-          </p>
+        {/* Mode toggle */}
+        <div className="flex gap-1 mb-3 p-1 rounded-xl" style={{ backgroundColor: "#F0F0F0" }}>
           <button
-            onClick={handleFetchUrls}
-            disabled={!enabled || urlLines.length === 0 || urlFetching}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0 w-full sm:w-auto"
+            type="button"
+            onClick={() => { setMode("urls"); setError(""); }}
+            className="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all"
             style={{
-              backgroundColor: !enabled || urlLines.length === 0 || urlFetching ? "#F0F0F0" : "#00F0A0",
-              color: !enabled || urlLines.length === 0 || urlFetching ? "#999" : "#0A0A0A",
-              cursor: !enabled || urlLines.length === 0 || urlFetching ? "not-allowed" : "pointer",
+              backgroundColor: mode === "urls" ? "white" : "transparent",
+              color: mode === "urls" ? "#0A0A0A" : "#888",
+              boxShadow: mode === "urls" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
             }}
           >
-            {urlFetching ? <><Loader2 className="w-4 h-4 animate-spin" />Fetching…</> : <><ArrowRight className="w-4 h-4" />Fetch jobs and tailor</>}
+            Paste URLs
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("description"); setError(""); }}
+            className="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all"
+            style={{
+              backgroundColor: mode === "description" ? "white" : "transparent",
+              color: mode === "description" ? "#0A0A0A" : "#888",
+              boxShadow: mode === "description" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+            }}
+          >
+            Paste Job Description
           </button>
         </div>
-        {error && <p className="text-xs mt-3" style={{ color: "#DC2626" }}>{error}</p>}
-        {Object.keys(urlFetchStates).length > 0 && (
-          <div className="mt-3 space-y-1.5">
-            {Object.entries(urlFetchStates).map(([url, st]) => (
-              <div key={url} className="flex items-center gap-2 text-xs">
-                {st.status === "loading" && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />}
-                {st.status === "done" && <Check className="w-3 h-3 flex-shrink-0" style={{ color: "#00c447" }} />}
-                {st.status === "error" && <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: "#EF4444" }} />}
-                <span className="truncate min-w-0" style={{ color: st.status === "error" ? "#EF4444" : st.status === "done" ? "#15803D" : "#555" }}>
-                  {st.status === "error" ? (st.error ?? "Failed to fetch") : url.replace(/^https?:\/\//, "").slice(0, 70)}
-                </span>
+
+        {mode === "urls" ? (
+          <>
+            <p className="text-xs mb-3" style={{ color: "#888" }}>
+              Paste up to {MAX_CUSTOM_URLS} job posting URLs. We will fetch the descriptions and jump straight to Review & Confirm.
+            </p>
+            <textarea
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              disabled={!enabled || urlFetching}
+              placeholder={"https://linkedin.com/jobs/view/...\nhttps://boards.greenhouse.io/company/jobs/..."}
+              rows={4}
+              className="w-full rounded-xl p-3 text-sm resize-y outline-none font-mono"
+              style={{
+                border: "1.5px solid #D0D5DD",
+                color: enabled ? "#0A0A0A" : "#999",
+                backgroundColor: enabled ? "white" : "#F8F9FA",
+                lineHeight: 1.6,
+              }}
+            />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-3 gap-3">
+              <p className="text-xs flex-1" style={{ color: "#888" }}>
+                {!enabled ? "Upload a resume first" : urlLines.length > 0 ? `${urlLines.length} of ${MAX_CUSTOM_URLS} URLs ready` : "Paste one URL per line"}
+              </p>
+              <button
+                onClick={handleFetchUrls}
+                disabled={!enabled || urlLines.length === 0 || urlFetching}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0 w-full sm:w-auto"
+                style={{
+                  backgroundColor: !enabled || urlLines.length === 0 || urlFetching ? "#F0F0F0" : "#00F0A0",
+                  color: !enabled || urlLines.length === 0 || urlFetching ? "#999" : "#0A0A0A",
+                  cursor: !enabled || urlLines.length === 0 || urlFetching ? "not-allowed" : "pointer",
+                }}
+              >
+                {urlFetching ? <><Loader2 className="w-4 h-4 animate-spin" />Fetching…</> : <><ArrowRight className="w-4 h-4" />Fetch jobs and tailor</>}
+              </button>
+            </div>
+            {Object.keys(urlFetchStates).length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {Object.entries(urlFetchStates).map(([url, st]) => (
+                  <div key={url} className="flex items-center gap-2 text-xs">
+                    {st.status === "loading" && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />}
+                    {st.status === "done" && <Check className="w-3 h-3 flex-shrink-0" style={{ color: "#00c447" }} />}
+                    {st.status === "error" && <AlertCircle className="w-3 h-3 flex-shrink-0" style={{ color: "#EF4444" }} />}
+                    <span className="truncate min-w-0" style={{ color: st.status === "error" ? "#EF4444" : st.status === "done" ? "#15803D" : "#555" }}>
+                      {st.status === "error" ? (st.error ?? "Failed to fetch") : url.replace(/^https?:\/\//, "").slice(0, 70)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="text-xs mb-3" style={{ color: "#888" }}>
+              Paste the full job description text. We'll tailor your resume to it directly — no URL needed.
+            </p>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={descTitle}
+                onChange={e => setDescTitle(e.target.value)}
+                disabled={!enabled}
+                placeholder="Job title (e.g. Senior Engineer)"
+                className="flex-1 rounded-xl px-3 py-2 text-sm outline-none"
+                style={{
+                  border: "1.5px solid #D0D5DD",
+                  color: enabled ? "#0A0A0A" : "#999",
+                  backgroundColor: enabled ? "white" : "#F8F9FA",
+                  minWidth: 0,
+                }}
+              />
+              <input
+                type="text"
+                value={descCompany}
+                onChange={e => setDescCompany(e.target.value)}
+                disabled={!enabled}
+                placeholder="Company name"
+                className="flex-1 rounded-xl px-3 py-2 text-sm outline-none"
+                style={{
+                  border: "1.5px solid #D0D5DD",
+                  color: enabled ? "#0A0A0A" : "#999",
+                  backgroundColor: enabled ? "white" : "#F8F9FA",
+                  minWidth: 0,
+                }}
+              />
+            </div>
+            <textarea
+              value={descText}
+              onChange={e => setDescText(e.target.value)}
+              disabled={!enabled}
+              placeholder="Paste the full job description here…"
+              rows={6}
+              className="w-full rounded-xl p-3 text-sm resize-y outline-none"
+              style={{
+                border: "1.5px solid #D0D5DD",
+                color: enabled ? "#0A0A0A" : "#999",
+                backgroundColor: enabled ? "white" : "#F8F9FA",
+                lineHeight: 1.6,
+              }}
+            />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-3 gap-3">
+              <p className="text-xs flex-1" style={{ color: "#888" }}>
+                {!enabled ? "Upload a resume first" : descText.trim().length > 0 ? `${descText.trim().length} characters` : "Paste a job description above"}
+              </p>
+              <button
+                onClick={handleSubmitDescription}
+                disabled={!enabled || !descText.trim()}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0 w-full sm:w-auto"
+                style={{
+                  backgroundColor: !enabled || !descText.trim() ? "#F0F0F0" : "#00F0A0",
+                  color: !enabled || !descText.trim() ? "#999" : "#0A0A0A",
+                  cursor: !enabled || !descText.trim() ? "not-allowed" : "pointer",
+                }}
+              >
+                <ArrowRight className="w-4 h-4" />Tailor to this job
+              </button>
+            </div>
+          </>
         )}
+        {error && <p className="text-xs mt-3" style={{ color: "#DC2626" }}>{error}</p>}
       </div>
       </div>
     </div>
