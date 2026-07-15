@@ -1,7 +1,7 @@
 // @ts-nocheck
 import express from "express";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import pinoHttpModule from "pino-http";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
@@ -68,7 +68,7 @@ function rateLimitKey(req: express.Request): string {
     // Use first 32 chars of token as a stable per-user key
     return `user:${auth.slice(7, 39)}`;
   }
-  return req.ip ?? "unknown";
+  return ipKeyGenerator(req.ip);
 }
 
 const rateLimitResponse = (code: string) => ({
