@@ -367,6 +367,7 @@ function classifyAndSanitize(resume: ResumeRecord): { certifications: string[]; 
 async function repairTailoringJson(malformedJson: string, parseError: unknown): Promise<TailoringResult> {
   const completion = await openai.chat.completions.create({
     model: DEPLOYMENT,
+    extra_body: { enable_thinking: false },
     messages: [
       {
         role: "system",
@@ -478,7 +479,8 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
-      max_completion_tokens: 8192,
+      max_completion_tokens: 3000,
+      extra_body: { enable_thinking: false },
       messages: [
         {
           role: "system",
@@ -652,6 +654,7 @@ router.post("/tailor", async (req, res) => {
           { role: "user", content: prompt },
         ],
         stream: true,
+        extra_body: { enable_thinking: false },
         response_format: { type: "json_object" },
       },
       // Abort the streaming request if the model hasn't finished in 90s
@@ -787,6 +790,7 @@ router.post("/suggest-gap-experience", async (req, res) => {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
       max_completion_tokens: 512,
+      extra_body: { enable_thinking: false },
       messages: [
         {
           role: "system",
@@ -857,6 +861,7 @@ router.post("/retry-change", async (req, res) => {
     const completion = await openai.chat.completions.create({
       model: DEPLOYMENT,
       max_completion_tokens: 512,
+      extra_body: { enable_thinking: false },
       messages: [
         { role: "system", content: SYSTEM_TAILORING },
         {
@@ -907,6 +912,7 @@ router.post("/cover-letter", async (req, res) => {
     const stream = await openai.chat.completions.create({
       model: DEPLOYMENT,
       max_completion_tokens: 1024,
+      extra_body: { enable_thinking: false },
       messages: [
         {
           role: "system",
