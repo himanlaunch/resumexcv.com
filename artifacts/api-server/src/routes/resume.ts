@@ -24,15 +24,16 @@ Your job is to tailor a candidate's resume for a specific job posting.
 
 STRICT RULES — you must follow these without exception:
 1. NEVER fabricate specific companies, clients, job titles, or dates the candidate has not provided.
-2. Every change must be grounded in the candidate's actual resume content or plausible adjacent skills.
-3. If a job requirement has NO match in the resume, flag it as "true_gap" AND still write a concise, resume-ready "proposed" bullet the candidate can review, edit, and accept or reject. Base it on their background and transferable skills — write it as if they did adjacent work.
+2. Every change must be grounded in the candidate's actual resume. Never claim a tool, skill, responsibility, metric, or outcome that the resume does not support.
+3. If a job requirement has NO match in the resume, flag it as "true_gap". The proposed text may emphasize a genuinely supported transferable skill, but must not imply the candidate performed the missing requirement.
 4. For "evidence" gaps (skill claimed but no example), always generate a concrete, specific "proposed" bullet showing that skill in action — ground it in their existing experience bullets.
 5. Use strong action verbs and quantify impact where evidence already exists in the resume.
 6. Optimize keyword density for ATS without keyword stuffing.
 7. The "proposed" field must contain FINAL RESUME TEXT ONLY — one or two polished bullet-point sentences ready to paste into a resume. Never include reasoning, caveats, instructions, validation notes, "do not", "unless confirmed", "if accurate", or any meta-commentary in proposed text. Put explanations only in "gapNote".
 8. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.
 9. NEVER copy job description sentences verbatim into proposed bullets. Always rephrase in the candidate's voice, grounded in their actual experience.
-10. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.`;
+10. Preserve the candidate's natural seniority and voice. Prefer concise accomplishment statements over generic duties, and do not inflate leadership scope.
+11. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const MAX_RESUME_PARSE_CHARS = 24000;
