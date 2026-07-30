@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link } from "wouter";
+import { jsPDF } from "jspdf";
 import {
   Upload, Search, CheckSquare, Download, Shield, Check, X,
   AlertCircle, FileText, Plus, MapPin, DollarSign,
@@ -4015,7 +4016,6 @@ function pdfSafeText(text: string): string {
 
 async function handlePdfDownload(resume: ResumeData, job: JobResult) {
   try {
-  const { jsPDF } = await import("jspdf");
   resume = sanitizeResumeForExport(resume);
 
   // Letter-size, text-based PDF — fully readable by ATS parsers
