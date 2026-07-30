@@ -6,15 +6,15 @@ const digitalOceanApiKey = process.env.DIGITALOCEAN_TOKEN?.trim();
 export const usingOpenRouter = Boolean(openRouterApiKey);
 
 export const resumeCustomizationModel = usingOpenRouter
-  ? process.env.OPENROUTER_MODEL?.trim() || "~anthropic/claude-sonnet-latest"
+  ? process.env.OPENROUTER_MODEL?.trim() || "deepseek/deepseek-v3.2"
   : process.env.DIGITALOCEAN_MODEL?.trim();
 
 export const fastLlmModel = usingOpenRouter
-  ? process.env.OPENROUTER_FAST_MODEL?.trim() || "openai/gpt-5.6-luna"
+  ? process.env.OPENROUTER_FAST_MODEL?.trim() || "google/gemini-2.5-flash-lite"
   : process.env.DIGITALOCEAN_MODEL?.trim();
 
 const fallbackModel =
-  process.env.OPENROUTER_FALLBACK_MODEL?.trim() || "openai/gpt-5.6-terra";
+  process.env.OPENROUTER_FALLBACK_MODEL?.trim() || "google/gemini-2.5-flash";
 
 export const llm = new OpenAI({
   apiKey: openRouterApiKey || digitalOceanApiKey || "missing-api-key",
@@ -48,6 +48,7 @@ export function openRouterRouting({
     provider: {
       zdr: true,
       data_collection: "deny",
+      sort: "price",
       ...(structured ? { require_parameters: true } : {}),
     },
   };
