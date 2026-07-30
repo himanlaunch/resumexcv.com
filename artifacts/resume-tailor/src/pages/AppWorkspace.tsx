@@ -334,6 +334,66 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits,
   );
 }
 
+function MobileTopBar({ credits, onBuyCredits }: { credits: CreditBalance | null; onBuyCredits: () => void }) {
+  const { user, signOut } = useAuth();
+  const displayEmail = user?.email ?? "Signed in";
+  const displayName = [user?.user_metadata?.full_name, user?.user_metadata?.name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+    ?.trim() ?? displayEmail.split("@")[0]?.replace(/[._-]+/g, " ") ?? "Profile";
+  const initials = displayName.split(/\s+/).map(name => name[0]).slice(0, 2).join("").toUpperCase();
+
+  return (
+    <header className="mobile-app-bar sticky top-0 z-40 flex md:hidden items-center gap-2 border-b bg-white px-3 py-2" style={{ borderColor: "#E5E8EA" }}>
+      <Link href="/app" className="flex min-w-0 flex-1 items-center" aria-label="ResumeX100 workspace">
+        <BrandLogo imageClassName="h-7 max-w-[120px]" />
+      </Link>
+      <Link
+        href="/command-center"
+        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
+        style={{ backgroundColor: "#F2F4F5", color: "#444" }}
+        aria-label="Application Command Center"
+        title="Application Command Center"
+      >
+        <Briefcase className="h-4 w-4" />
+      </Link>
+      <button
+        type="button"
+        onClick={onBuyCredits}
+        className="flex h-11 min-w-11 flex-shrink-0 items-center justify-center gap-1 rounded-xl px-2 text-xs font-bold"
+        style={{ backgroundColor: "#ECFFE0", color: "#005A3D", border: "1px solid rgba(0,196,127,0.2)" }}
+        aria-label={`Buy credits. ${credits?.balance ?? 0} available`}
+      >
+        <Zap className="h-3.5 w-3.5" />
+        {credits?.balance ?? 0}
+      </button>
+      <details className="relative flex-shrink-0 [&>summary::-webkit-details-marker]:hidden">
+        <summary
+          className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-full text-xs font-bold"
+          style={{ backgroundColor: "#0F0F0F", color: "#fff" }}
+          aria-label="Open account menu"
+        >
+          {initials || "U"}
+        </summary>
+        <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl bg-white shadow-xl" style={{ border: "1px solid #E5E8EA" }}>
+          <div className="border-b px-4 py-3" style={{ borderColor: "#F0F0F0" }}>
+            <p className="truncate text-sm font-semibold" style={{ color: "#0A0A0A" }}>{displayName}</p>
+            <p className="truncate text-xs" style={{ color: "#777" }}>{displayEmail}</p>
+          </div>
+          <Link href="/command-center" className="flex min-h-11 items-center gap-2 px-4 py-3 text-sm font-medium" style={{ color: "#333" }}>
+            <Briefcase className="h-4 w-4" /> Application Command Center
+          </Link>
+          <button type="button" onClick={onBuyCredits} className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium" style={{ color: "#333" }}>
+            <Zap className="h-4 w-4" /> Buy credits
+          </button>
+          <button type="button" onClick={() => void signOut()} className="flex min-h-11 w-full items-center px-4 py-3 text-left text-sm font-semibold" style={{ color: "#B91C1C", borderTop: "1px solid #F0F0F0" }}>
+            Sign out
+          </button>
+        </div>
+      </details>
+    </header>
+  );
+}
+
 function MyResumesPage({ savedVersions, onDeleteVersion, onSaveVersion }: { savedVersions: SavedVersion[]; onDeleteVersion: (id: string) => void; onSaveVersion: (version: SavedVersion) => void }) {
   const [query, setQuery] = useState("");
   const [downloadingVersion, setDownloadingVersion] = useState<{ id: string; format: "pdf" | "docx" } | null>(null);
@@ -437,25 +497,25 @@ function MyResumesPage({ savedVersions, onDeleteVersion, onSaveVersion }: { save
               return (
                 <div key={version.id} className="card-base rounded-2xl overflow-hidden">
                   <div className="p-4">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate" style={{ color: "#0A0A0A" }}>{version.name}</p>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-1">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm break-words sm:truncate" style={{ color: "#0A0A0A" }}>{version.name}</p>
                         {applyLink ? (
                           <a href={applyLink} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs mt-0.5 hover:underline"
+                            className="inline-flex max-w-full items-start gap-1 text-xs mt-0.5 hover:underline break-words"
                             style={{ color: "#00c447" }}>
-                            {version.jobTitle} @ {version.jobCompany} &middot; {dateStr}
+                            <span>{version.jobTitle} @ {version.jobCompany} &middot; {dateStr}</span>
                             <ExternalLink className="w-3 h-3 flex-shrink-0" />
                           </a>
                         ) : (
-                          <p className="text-xs mt-0.5" style={{ color: "#888" }}>{version.jobTitle} @ {version.jobCompany} &middot; {dateStr}</p>
+                          <p className="text-xs mt-0.5 break-words" style={{ color: "#888" }}>{version.jobTitle} @ {version.jobCompany} &middot; {dateStr}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="grid w-full grid-cols-4 items-center gap-1 sm:flex sm:w-auto sm:flex-shrink-0">
                         <button
                           onClick={() => { void download(version, "docx"); }}
                           disabled={downloadingVersion?.id === version.id}
-                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          className="flex min-h-11 items-center justify-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-xl sm:rounded-full transition-all"
                           title="Download DOCX"
                           style={{ backgroundColor: "#ECFFE0", color: "#005A3D", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
                         >
@@ -465,7 +525,7 @@ function MyResumesPage({ savedVersions, onDeleteVersion, onSaveVersion }: { save
                         <button
                           onClick={() => { void download(version, "pdf"); }}
                           disabled={downloadingVersion?.id === version.id}
-                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          className="flex min-h-11 items-center justify-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-xl sm:rounded-full transition-all"
                           title="Download PDF"
                           style={{ backgroundColor: "#F0F0F0", color: "#444", opacity: downloadingVersion?.id === version.id ? 0.55 : 1 }}
                         >
@@ -474,20 +534,20 @@ function MyResumesPage({ savedVersions, onDeleteVersion, onSaveVersion }: { save
                         </button>
                         <button
                           onClick={() => setPreviewingVersionId(isPreviewing ? null : version.id)}
-                          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-full transition-all"
+                          className="flex min-h-11 items-center justify-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-xl sm:rounded-full transition-all"
                           style={{ backgroundColor: isPreviewing ? "#0A0A0A" : "#F0F0F0", color: isPreviewing ? "#fff" : "#444" }}
                         >
                           {isPreviewing ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           {isPreviewing ? "Hide" : "View"}
                         </button>
                         {isDeleting ? (
-                          <div className="flex items-center gap-1">
+                          <div className="col-span-1 flex min-h-11 items-center justify-center gap-1">
                             <button onClick={() => { onDeleteVersion(version.id); setDeletingVersionId(null); if (isPreviewing) setPreviewingVersionId(null); }}
-                              className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}>Delete</button>
-                            <button onClick={() => setDeletingVersionId(null)} className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>Cancel</button>
+                              className="text-xs font-semibold px-2 py-1.5 rounded-lg" style={{ backgroundColor: "#FEE2E2", color: "#991B1B" }}>Delete</button>
+                            <button onClick={() => setDeletingVersionId(null)} aria-label="Cancel delete" className="text-xs px-2 py-1.5 rounded-lg" style={{ backgroundColor: "#F0F0F0", color: "#555" }}><X className="h-3.5 w-3.5" /></button>
                           </div>
                         ) : (
-                          <button onClick={() => setDeletingVersionId(version.id)} className="p-1.5 rounded-full transition-all"
+                          <button onClick={() => setDeletingVersionId(version.id)} aria-label={`Delete ${version.name}`} className="flex min-h-11 items-center justify-center p-1.5 rounded-xl sm:rounded-full transition-all"
                             style={{ color: "#CCC" }}
                             onMouseEnter={e => { e.currentTarget.style.color = "#EF4444"; e.currentTarget.style.backgroundColor = "#FEE2E2"; }}
                             onMouseLeave={e => { e.currentTarget.style.color = "#CCC"; e.currentTarget.style.backgroundColor = "transparent"; }}>
@@ -582,8 +642,8 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
-      <div className="w-full max-w-2xl rounded-2xl p-5 md:p-6" style={{ backgroundColor: "#fff", border: "1px solid #E5E8EA", boxShadow: "0 20px 60px rgba(0,0,0,0.22)" }}>
+    <div className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+      <div className="mobile-modal-panel max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl p-4 sm:rounded-2xl sm:p-5 md:p-6" style={{ backgroundColor: "#fff", border: "1px solid #E5E8EA", boxShadow: "0 20px 60px rgba(0,0,0,0.22)" }}>
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
             <h2 className="font-heading font-bold text-2xl" style={{ color: "#0A0A0A" }}>Buy resume credits</h2>
@@ -637,30 +697,33 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
 
 // ── Mobile bottom nav ─────────────────────────────────────────────────────────
 
-function MobileBottomNav({ step, setStep, completedSteps }: { step: Step; setStep: (s: Step) => void; completedSteps: Set<Step> }) {
+function MobileBottomNav({ step, setStep, completedSteps, showMyResumes, onShowMyResumes }: { step: Step; setStep: (s: Step) => void; completedSteps: Set<Step>; showMyResumes: boolean; onShowMyResumes: () => void }) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden items-stretch"
-      style={{ backgroundColor: "#0F0F0F", borderTop: "1px solid #1E1E1E", height: 60 }}>
+    <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-50 flex md:hidden items-stretch"
+      style={{ backgroundColor: "#0F0F0F", borderTop: "1px solid #1E1E1E" }}>
       {STEPS.map((s) => {
-        const isActive = step === s.num;
+        const isActive = !showMyResumes && step === s.num;
         const isDone = completedSteps.has(s.num) && !isActive;
         return (
-          <button key={s.num} onClick={() => setStep(s.num)}
-            className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+          <button type="button" key={s.num} onClick={() => setStep(s.num)}
+            className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 px-1 transition-all"
             style={{ color: isActive ? "#4DFFBD" : isDone ? "#D1D5DB" : "#9CA3AF" }}>
             <div className="w-5 h-5 flex items-center justify-center">
               {isDone ? <Check className="w-4 h-4" style={{ color: "#00F0A0" }} /> : s.icon}
             </div>
-            <span style={{ fontSize: "0.6rem", fontWeight: 600, lineHeight: 1 }}>{s.label.split(" ")[0]}</span>
+            <span className="max-w-full truncate" style={{ fontSize: "0.62rem", fontWeight: 600, lineHeight: 1 }}>{s.label.split(" ")[0]}</span>
           </button>
         );
       })}
-      <Link href="/command-center"
-        className="flex-1 flex flex-col items-center justify-center gap-0.5"
-        style={{ color: "#555" }}>
-        <Briefcase className="w-4 h-4" />
-        <span style={{ fontSize: "0.6rem", fontWeight: 600, lineHeight: 1 }}>Command</span>
-      </Link>
+      <button
+        type="button"
+        onClick={onShowMyResumes}
+        className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 px-1 transition-all"
+        style={{ color: showMyResumes ? "#4DFFBD" : "#9CA3AF" }}
+      >
+        <BookmarkCheck className="h-4 w-4" />
+        <span style={{ fontSize: "0.62rem", fontWeight: 600, lineHeight: 1 }}>Saved</span>
+      </button>
     </nav>
   );
 }
@@ -3889,7 +3952,7 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
   const sectionStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: "1.2px", textTransform: "uppercase", color: "#555", borderBottom: "1px solid #DDD", paddingBottom: 4, marginBottom: 10, marginTop: 18 };
 
   return (
-    <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 13, lineHeight: 1.6, color: "#222", padding: "28px 32px", background: "white", borderRadius: 8, border: "1px solid #E5E7EB" }}>
+    <div className="resume-preview" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 13, lineHeight: 1.6, color: "#222", padding: "28px 32px", background: "white", borderRadius: 8, border: "1px solid #E5E7EB" }}>
       {jobTitle && jobCompany && (
         <div style={{ fontSize: 11, color: "#00796b", marginBottom: 16, padding: "5px 10px", background: "#E8F5E9", borderRadius: 4, textAlign: "center" }}>
           Tailored for: <strong>{jobTitle}</strong> at <strong>{jobCompany}</strong>
@@ -3929,7 +3992,7 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
           <div style={sectionStyle}>Experience</div>
           {sortByDateDesc(resume.experience!).map((exp, i) => (
             <div key={i} style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+              <div className="resume-preview-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <span style={{ fontSize: 13.5, color: "#111" }}>
                   <strong>{exp.title}</strong>
                   <strong> at {exp.company}</strong>
@@ -3952,7 +4015,7 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
           <div style={sectionStyle}>Education</div>
           {sortByDateDesc(resume.education!).map((e, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+              <div className="resume-preview-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <span style={{ fontSize: 13, color: "#111" }}>
                   <strong>{[e.degree, e.school].filter(Boolean).join(", ")}</strong>
                   {e.location && <span style={{ fontWeight: "normal", color: "#666" }}>, {e.location}</span>}
@@ -3970,7 +4033,7 @@ function ResumePreview({ resume, jobTitle, jobCompany }: { resume: ResumeData; j
           <div style={sectionStyle}>Projects</div>
           {resume.projects!.map((proj, i) => (
             <div key={i} style={{ marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div className="resume-preview-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <strong style={{ fontSize: 13, color: "#111" }}>{proj.name}</strong>
                 {proj.period && <span style={{ fontSize: 12, color: "#666" }}>{proj.period}</span>}
               </div>
@@ -4787,21 +4850,19 @@ function ResumeDiffView({ original, tailored, rows }: { original: ResumeData; ta
           {changedCount} change{changedCount !== 1 ? "s" : ""} applied
         </div>
       </div>
-      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as const }}>
-      <div style={{ display: "flex", gap: 0, border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.08)", minWidth: 720 }}>
-        <div style={{ flex: 1, minWidth: 0, borderRight: "2px solid #E5E7EB" }}>
+      <div className="grid grid-cols-1 overflow-hidden rounded-lg border shadow-sm md:grid-cols-2" style={{ borderColor: "#E5E7EB" }}>
+        <div className="min-w-0 border-b-2 md:border-b-0 md:border-r-2" style={{ borderColor: "#E5E7EB" }}>
           <div style={{ padding: "7px 16px", background: "#FEF2F2", borderBottom: "1px solid #FECACA", textAlign: "center" as const }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase" as const, letterSpacing: "0.8px" }}>Original</span>
           </div>
           {panel(original, "left")}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="min-w-0">
           <div style={{ padding: "7px 16px", background: "#F0FDF4", borderBottom: "1px solid #BBF7D0", textAlign: "center" as const }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: "#166534", textTransform: "uppercase" as const, letterSpacing: "0.8px" }}>Tailored</span>
           </div>
           {panel(tailored, "right")}
         </div>
-      </div>
       </div>
     </div>
   );
@@ -5131,10 +5192,8 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
                         ><Download className="w-3 h-3" /> Download PDF</button>
                       </div>
                     </div>
-                    <div style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)", borderRadius: 8, overflowX: "auto", WebkitOverflowScrolling: "touch" as const }}>
-                      <div style={{ minWidth: 640 }}>
-                        <ResumePreview resume={tailored} jobTitle={job.title} jobCompany={job.company} />
-                      </div>
+                    <div style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)", borderRadius: 8, overflow: "hidden" }}>
+                      <ResumePreview resume={tailored} jobTitle={job.title} jobCompany={job.company} />
                     </div>
                   </div>
                 )}
@@ -5473,9 +5532,10 @@ export default function AppWorkspace() {
   }
 
   return (
-    <div className="flex min-h-screen" style={{ backgroundColor: "#F2F4F5" }}>
+    <div className="flex min-h-[100dvh]" style={{ backgroundColor: "#F2F4F5" }}>
       <Sidebar step={step} setStep={navigateTo} completedSteps={completedSteps} resume={resume} credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} showMyResumes={showMyResumes} onShowMyResumes={() => setShowMyResumes(true)} />
-      <main className="flex-1 min-h-screen overflow-x-hidden flex flex-col pb-16 md:pb-0 md:ml-64">
+      <main className="mobile-workspace-main flex min-h-[100dvh] min-w-0 flex-1 flex-col overflow-x-hidden md:ml-64 md:pb-0">
+        <MobileTopBar credits={creditBalance} onBuyCredits={() => setBuyCreditsOpen(true)} />
         {/* Promo banner for signed-out users */}
         {!user && !authLoading && (
           <div className="flex items-center justify-between gap-3 px-4 py-2.5"
@@ -5541,7 +5601,7 @@ export default function AppWorkspace() {
           </>
         )}
       </main>
-      <MobileBottomNav step={step} setStep={navigateTo} completedSteps={completedSteps} />
+      <MobileBottomNav step={step} setStep={navigateTo} completedSteps={completedSteps} showMyResumes={showMyResumes} onShowMyResumes={() => setShowMyResumes(true)} />
       <BuyCreditsModal open={buyCreditsOpen} onClose={() => setBuyCreditsOpen(false)} credits={creditBalance} onCreditsUpdated={refreshCredits} />
     </div>
   );
