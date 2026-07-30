@@ -3,7 +3,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { logger } from "../lib/logger.js";
 import { pool } from "@workspace/db";
-import OpenAI from "openai";
+import { fastLlmModel, llm, openRouterRouting } from "../lib/llm.js";
 
 // SSRF guard — blocks requests to private/loopback IP ranges and non-http(s) schemes
 function isSafePublicUrl(rawUrl: string): boolean {
@@ -26,12 +26,6 @@ function isSafePublicUrl(rawUrl: string): boolean {
   }
   return true;
 }
-
-const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL;
-const openai = new OpenAI({
-  apiKey: process.env.DIGITALOCEAN_TOKEN ?? "missing-api-key",
-  baseURL: "https://inference.do-ai.run/v1",
-});
 
 const router = Router();
 
@@ -777,8 +771,9 @@ router.post("/from-url", async (req, res) => {
 
   if (pageHasContent) {
     try {
-      const completion = await openai.chat.completions.create({
-        model: DEPLOYMENT,
+      const completion = await llm.chat.completions.create({
+        model: fastLlmModel,
+        ...openRouterRouting({ structured: true }),
         max_completion_tokens: 900,
         messages: [
           {

@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { Router } from "express";
 import { createHash } from "crypto";
-import OpenAI from "openai";
 import { logger } from "../lib/logger.js";
 import multer from "multer";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
@@ -9,15 +8,15 @@ import mammoth from "mammoth";
 import { pool } from "@workspace/db";
 import { getSupabaseUser } from "../lib/auth.js";
 import { consumeResumeCredit, InsufficientCreditsError, refundResumeCredit } from "../lib/credits.js";
+import {
+  fastLlmModel,
+  llm,
+  llmProviderLabel,
+  openRouterRouting,
+  resumeCustomizationModel,
+} from "../lib/llm.js";
 
 const router = Router();
-
-const DEPLOYMENT = process.env.DIGITALOCEAN_MODEL;
-
-const openai = new OpenAI({
-  apiKey: process.env.DIGITALOCEAN_TOKEN ?? "missing-api-key",
-  baseURL: "https://inference.do-ai.run/v1",
-});
 
 // ── Shared system prompt ──────────────────────────────────────────────────────
 const SYSTEM_TAILORING = `You are an expert resume writer and ATS specialist.
@@ -365,8 +364,9 @@ function classifyAndSanitize(resume: ResumeRecord): { certifications: string[]; 
 }
 
 async function repairTailoringJson(malformedJson: string, parseError: unknown): Promise<TailoringResult> {
-  const completion = await openai.chat.completions.create({
-    model: DEPLOYMENT,
+  const completion = await llm.chat.completions.create({
+    model: fastLlmModel,
+    ...openRouterRouting({ structured: true }),
     messages: [
       {
         role: "system",
@@ -476,8 +476,9 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: DEPLOYMENT,
+    const completion = await llm.chat.completions.create({
+      model: fastLlmModel,
+      ...openRouterRouting({ structured: true }),
       max_completion_tokens: 8192,
       messages: [
         {
@@ -556,10 +557,11 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
       aiErrStatus: aiErr?.status,
       aiErrMessage: aiErr?.message,
       aiErrBody: typeof aiErr?.error === "object" ? JSON.stringify(aiErr.error) : aiErr?.error,
-      model: DEPLOYMENT,
+      model: fastLlmModel,
+      provider: llmProviderLabel(),
     }, "AI resume parsing failed");
     const userMsg = aiErr?.status === 403
-      ? "AI service rejected the request (403). Check that DIGITALOCEAN_MODEL is set to a valid model slug."
+      ? "AI service rejected the request (403). Check that the configured AI model is available."
       : "AI parsing failed. Please try again.";
     return res.status(500).json({ error: userMsg });
   }
@@ -644,9 +646,10 @@ router.post("/tailor", async (req, res) => {
 
     sendEvent({ type: "status", message: "Generating tailored changes…" });
 
-    const stream = await openai.chat.completions.create(
+    const stream = await llm.chat.completions.create(
       {
-        model: DEPLOYMENT,
+        model: resumeCustomizationModel,
+        ...openRouterRouting({ structured: true }),
         messages: [
           { role: "system", content: SYSTEM_TAILORING },
           { role: "user", content: prompt },
@@ -713,7 +716,7 @@ router.post("/tailor", async (req, res) => {
     const isTimeout = err?.name === "TimeoutError" || err?.code === "ETIMEDOUT" || /timeout/i.test(err?.message ?? "");
 
     if (isRateLimit) {
-      logger.warn({ userId: user.id, jobId: job.id }, "Azure OpenAI rate limit on tailor");
+      logger.warn({ userId: user.id, jobId: job.id, provider: llmProviderLabel() }, "AI rate limit on tailor");
       const retryAfter = err?.headers?.["retry-after"] ?? "30";
       sendEvent({
         type: "error",
@@ -784,8 +787,9 @@ router.post("/suggest-gap-experience", async (req, res) => {
   ].filter(Boolean).join("\n");
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: DEPLOYMENT,
+    const completion = await llm.chat.completions.create({
+      model: fastLlmModel,
+      ...openRouterRouting({ structured: true }),
       max_completion_tokens: 512,
       messages: [
         {
@@ -854,8 +858,9 @@ router.post("/retry-change", async (req, res) => {
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: DEPLOYMENT,
+    const completion = await llm.chat.completions.create({
+      model: resumeCustomizationModel,
+      ...openRouterRouting({ structured: true }),
       max_completion_tokens: 512,
       messages: [
         { role: "system", content: SYSTEM_TAILORING },
@@ -904,8 +909,9 @@ router.post("/cover-letter", async (req, res) => {
   res.flushHeaders();
 
   try {
-    const stream = await openai.chat.completions.create({
-      model: DEPLOYMENT,
+    const stream = await llm.chat.completions.create({
+      model: resumeCustomizationModel,
+      ...openRouterRouting(),
       max_completion_tokens: 1024,
       messages: [
         {
