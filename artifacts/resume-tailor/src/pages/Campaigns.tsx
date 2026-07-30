@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Plus, TrendingUp, FileText, Clock, Award, ExternalLink, Filter } from "lucide-react";
+import { ArrowLeft, Plus, TrendingUp, FileText, Clock, Award, ExternalLink, Filter, MapPin, DollarSign, CalendarDays, ShieldCheck, ArrowRight } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { BrandLogo } from "@/components/BrandLogo";
 import { loadCampaigns, syncCampaignsFromServer, updateCampaignName, updateCampaignStatus, type CampaignRecord, type CampaignStatus } from "@/lib/campaigns";
@@ -27,6 +27,26 @@ function companyColor(company: string) {
   return colors[Math.abs(h) % colors.length];
 }
 
+function postingAgeHours(value?: string) {
+  const text = (value ?? "").toLowerCase();
+  const match = text.match(/(\d+)\+?\s*(minute|min|hour|hr|day|week|month)/);
+  if (!match) return text.includes("today") || text.includes("recent") ? 0 : 720;
+  const amount = Number(match[1]);
+  if (match[2].startsWith("min")) return amount / 60;
+  if (match[2].startsWith("hour") || match[2].startsWith("hr")) return amount;
+  if (match[2].startsWith("day")) return amount * 24;
+  if (match[2].startsWith("week")) return amount * 168;
+  return amount * 720;
+}
+
+function priorityScore(record: CampaignRecord) {
+  const match = record.matchQuality ?? 50;
+  const freshness = Math.max(0, 100 - postingAgeHours(record.postedAt) / 7.2);
+  const ready = record.status === "Not Applied" ? 15 : 0;
+  const remote = record.remote ? 5 : 0;
+  return match * 0.65 + freshness * 0.2 + ready + remote;
+}
+
 export default function Campaigns() {
   const { user } = useAuth();
   const [campaigns, setCampaigns] = useState<CampaignRecord[]>([]);
@@ -48,6 +68,10 @@ export default function Campaigns() {
   };
 
   const filtered = filterStatus === "All" ? campaigns : campaigns.filter(c => c.status === filterStatus);
+  const bestToday = useMemo(
+    () => [...campaigns].filter(c => c.status === "Not Applied").sort((a, b) => priorityScore(b) - priorityScore(a)).slice(0, 3),
+    [campaigns],
+  );
   const summaryStats = useMemo(() => {
     const applicationsSent = campaigns.filter(c => c.status !== "Not Applied").length;
     const interviews = campaigns.filter(c => c.status === "Interview" || c.status === "Offer").length;
@@ -72,7 +96,7 @@ export default function Campaigns() {
           <div className="hidden sm:block w-px h-5" style={{ backgroundColor: "#E0E0E0" }} />
           <div className="flex items-center gap-3 min-w-0">
             <BrandLogo imageClassName="h-9" />
-            <span className="font-heading font-bold text-base truncate" style={{ color: "#0A0A0A" }}>Campaign Tracker</span>
+            <span className="font-heading font-bold text-base truncate" style={{ color: "#0A0A0A" }}>Application Command Center</span>
           </div>
         </div>
         <div className="flex items-center gap-2 md:gap-3 flex-wrap sm:flex-nowrap">
@@ -85,8 +109,8 @@ export default function Campaigns() {
 
       <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8">
         <div className="mb-6 md:mb-8">
-          <h1 className="font-heading font-bold text-2xl md:text-3xl mb-1" style={{ color: "#0A0A0A" }}>Your Applications</h1>
-          <p className="text-sm" style={{ color: "#888" }}>Track every job you've applied to with tailored resumes.</p>
+          <h1 className="font-heading font-bold text-2xl md:text-3xl mb-1" style={{ color: "#0A0A0A" }}>What should you do today?</h1>
+          <p className="text-sm" style={{ color: "#888" }}>Prioritized jobs, application readiness, and the next action for every opportunity.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
@@ -102,6 +126,50 @@ export default function Campaigns() {
             </div>
           ))}
         </div>
+
+        <section className="mb-8" aria-labelledby="best-jobs-heading">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 id="best-jobs-heading" className="font-heading font-bold text-lg" style={{ color: "#0A0A0A" }}>Best jobs to apply to today</h2>
+              <p className="text-xs" style={{ color: "#888" }}>Ranked by match quality, posting age, and application readiness.</p>
+            </div>
+          </div>
+          {bestToday.length > 0 ? (
+            <div className="grid lg:grid-cols-3 gap-3">
+              {bestToday.map((c, index) => (
+                <article key={c.id} className="card-base rounded-2xl p-5" style={{ border: index === 0 ? "1.5px solid #00c447" : undefined }}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold mb-1" style={{ color: "#00a86b" }}>#{index + 1} priority</div>
+                      <h3 className="font-heading font-bold truncate">{c.jobTitle}</h3>
+                      <p className="text-sm truncate" style={{ color: "#666" }}>{c.company}</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center font-heading font-bold" style={{ backgroundColor: "#ECFFE0", color: "#005A3D" }}>
+                      {c.matchQuality ?? "—"}{c.matchQuality != null ? "%" : ""}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: "#F8F9FA" }}><Clock className="w-3 h-3 inline mr-1" />{c.postedAt || "Age unknown"}</div>
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: "#F8F9FA" }}><DollarSign className="w-3 h-3 inline mr-1" />{c.salary || "Not stated"}</div>
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: "#F8F9FA" }}><MapPin className="w-3 h-3 inline mr-1" />{c.remote ? "Remote fit" : c.location}</div>
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: "#F8F9FA" }}><ShieldCheck className="w-3 h-3 inline mr-1" />{c.visaRequirement || "Visa not stated"}</div>
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: "#F8F9FA" }}><CalendarDays className="w-3 h-3 inline mr-1" />{c.applicationDeadline || "No deadline"}</div>
+                    <div className="p-2 rounded-lg" style={{ backgroundColor: "#F8F9FA" }}><FileText className="w-3 h-3 inline mr-1" />{c.resumeVersion || c.version}</div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-3" style={{ borderTop: "1px solid #F0F0F0" }}>
+                    <div>
+                      <div className="text-[10px] uppercase font-bold" style={{ color: "#888" }}>Next action</div>
+                      <div className="text-sm font-semibold">{c.nextAction || "Apply today"}</div>
+                    </div>
+                    {c.applyLink && <a href={c.applyLink} target="_blank" rel="noopener noreferrer" className="btn-mint text-xs">Open <ArrowRight className="w-3 h-3" /></a>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="card-base rounded-2xl p-6 text-sm" style={{ color: "#666" }}>Tailor a resume for a job and it will be prioritized here.</div>
+          )}
+        </section>
 
         <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1" style={{ WebkitOverflowScrolling: "touch" }}>
           <Filter className="w-4 h-4 flex-shrink-0" style={{ color: "#888" }} />
@@ -130,7 +198,7 @@ export default function Campaigns() {
             <table className="w-full">
               <thead>
                 <tr style={{ backgroundColor: "#F8F9FA", borderBottom: "1px solid #E5E8EA" }}>
-                  {["Name", "Job", "Location", "Salary", "Version", "Exported", "Status", ""].map(h => (
+                  {["Name", "Job", "Match", "Posted", "ATS / authorization", "Next action", "Status", ""].map(h => (
                     <th key={h} className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "#888" }}>{h}</th>
                   ))}
                 </tr>
@@ -163,12 +231,12 @@ export default function Campaigns() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-sm" style={{ color: "#666" }}>{c.location}</td>
-                      <td className="px-5 py-4 text-sm font-medium" style={{ color: "#333" }}>{c.salary}</td>
                       <td className="px-5 py-4">
-                        <span className="text-xs font-mono font-bold px-2 py-1 rounded" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>{c.version}</span>
+                        <span className="text-sm font-bold" style={{ color: (c.matchQuality ?? 0) >= 80 ? "#00a86b" : "#555" }}>{c.matchQuality != null ? `${c.matchQuality}%` : "—"}</span>
                       </td>
-                      <td className="px-5 py-4 text-sm" style={{ color: "#888" }}>{c.exportedDate}</td>
+                      <td className="px-5 py-4 text-xs" style={{ color: "#666" }}>{c.postedAt || "Unknown"}<div>{c.applicationDeadline && c.applicationDeadline !== "Not stated" ? `Due ${c.applicationDeadline}` : ""}</div></td>
+                      <td className="px-5 py-4 text-xs" style={{ color: "#666" }}><strong>{c.atsVendor || "Unknown ATS"}</strong><div>{c.visaRequirement || "Not stated"}</div></td>
+                      <td className="px-5 py-4 text-xs font-semibold" style={{ color: "#333" }}>{c.nextAction || "Apply today"}<div style={{ color: "#888" }}>{c.resumeVersion || c.version}</div></td>
                       <td className="px-5 py-4">
                         <select
                           value={c.status}

@@ -67,6 +67,19 @@ async function ensureProfileTables() {
 
     CREATE INDEX IF NOT EXISTS user_campaigns_user_idx
       ON user_campaigns (user_id, updated_at DESC);
+
+    ALTER TABLE user_generated_resumes ADD COLUMN IF NOT EXISTS tags jsonb NOT NULL DEFAULT '[]'::jsonb;
+    ALTER TABLE user_generated_resumes ADD COLUMN IF NOT EXISTS folder text NOT NULL DEFAULT 'All resumes';
+    ALTER TABLE user_generated_resumes ADD COLUMN IF NOT EXISTS convention text NOT NULL DEFAULT 'US';
+
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS match_quality integer;
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS posted_at text;
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS remote boolean NOT NULL DEFAULT false;
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS visa_requirement text;
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS application_deadline text;
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS resume_version text;
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS next_action text;
+    ALTER TABLE user_campaigns ADD COLUMN IF NOT EXISTS ats_vendor text;
   `);
   ensured = true;
 }
@@ -244,6 +257,13 @@ function sanitizeResumeRecord(resume = {}) {
     })),
     certifications: (resume.certifications ?? []).map(sanitizeResumeText).filter(Boolean),
     achievements: (resume.achievements ?? []).map(sanitizeResumeText).filter(Boolean),
+    projects: (resume.projects ?? []).map((project) => ({
+      name: sanitizeResumeText(project.name),
+      period: sanitizeResumeText(project.period),
+      bullets: (project.bullets ?? []).map(sanitizeResumeText).filter(Boolean),
+    })),
+    sectionOrder: Array.isArray(resume.sectionOrder) ? resume.sectionOrder.map(sanitizeResumeText).filter(Boolean) : [],
+    convention: ["US", "UK", "EU", "Canada", "Australia"].includes(resume.convention) ? resume.convention : "US",
   };
 }
 
@@ -371,7 +391,7 @@ router.get("/generated-resumes", async (req, res) => {
   try {
     await ensureProfileTables();
     const result = await pool.query(
-      `SELECT id, name, resume, job, job_title, job_company, diff_changes, source_job_id, saved_at
+      `SELECT id, name, resume, job, job_title, job_company, diff_changes, source_job_id, saved_at, tags, folder, convention
        FROM user_generated_resumes
        WHERE user_id = $1
        ORDER BY saved_at DESC`,
@@ -388,6 +408,9 @@ router.get("/generated-resumes", async (req, res) => {
         diffChanges: row.diff_changes ?? [],
         sourceJobId: row.source_job_id,
         savedAt: new Date(row.saved_at).getTime(),
+        tags: row.tags ?? [],
+        folder: row.folder ?? "All resumes",
+        convention: row.convention ?? "US",
       })),
     });
   } catch (err) {
@@ -410,6 +433,9 @@ router.post("/generated-resumes", async (req, res) => {
     diffChanges = [],
     sourceJobId = job?.id ?? null,
     savedAt,
+    tags = [],
+    folder = "All resumes",
+    convention = resume?.convention ?? "US",
   } = req.body ?? {};
 
   if (!name || !resume || !jobTitle || !jobCompany) {
@@ -422,8 +448,8 @@ router.post("/generated-resumes", async (req, res) => {
     await ensureProfileTables();
     const result = await pool.query(
       `INSERT INTO user_generated_resumes
-         (id, user_id, name, resume, job, job_title, job_company, diff_changes, source_job_id, saved_at)
-       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8::jsonb, $9, $10)
+         (id, user_id, name, resume, job, job_title, job_company, diff_changes, source_job_id, saved_at, tags, folder, convention)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12, $13)
        ON CONFLICT (id) DO UPDATE
        SET name = EXCLUDED.name,
            resume = EXCLUDED.resume,
@@ -432,7 +458,10 @@ router.post("/generated-resumes", async (req, res) => {
            job_company = EXCLUDED.job_company,
            diff_changes = EXCLUDED.diff_changes,
            source_job_id = EXCLUDED.source_job_id,
-           saved_at = EXCLUDED.saved_at
+           saved_at = EXCLUDED.saved_at,
+           tags = EXCLUDED.tags,
+           folder = EXCLUDED.folder,
+           convention = EXCLUDED.convention
        WHERE user_generated_resumes.user_id = EXCLUDED.user_id
        RETURNING id`,
       [
@@ -446,6 +475,9 @@ router.post("/generated-resumes", async (req, res) => {
         JSON.stringify(diffChanges),
         sourceJobId,
         savedDate,
+        JSON.stringify(Array.isArray(tags) ? tags : []),
+        folder,
+        convention,
       ],
     );
     if (result.rowCount === 0) {
@@ -484,7 +516,9 @@ router.get("/campaigns", async (req, res) => {
     await ensureProfileTables();
     const result = await pool.query(
       `SELECT id, name, job_title, company, version, exported_date, status,
-              location, salary, apply_link, updated_at, created_at
+              location, salary, apply_link, match_quality, posted_at, remote,
+              visa_requirement, application_deadline, resume_version, next_action,
+              ats_vendor, updated_at, created_at
        FROM user_campaigns WHERE user_id = $1 ORDER BY updated_at DESC`,
       [user.id],
     );
@@ -502,6 +536,14 @@ router.get("/campaigns", async (req, res) => {
         salary: r.salary,
         applyLink: r.apply_link,
         updatedAt: new Date(r.updated_at).getTime(),
+        matchQuality: r.match_quality,
+        postedAt: r.posted_at ?? "",
+        remote: r.remote,
+        visaRequirement: r.visa_requirement ?? "Not stated",
+        applicationDeadline: r.application_deadline ?? "Not stated",
+        resumeVersion: r.resume_version ?? r.version,
+        nextAction: r.next_action ?? "Apply today",
+        atsVendor: r.ats_vendor ?? "Unknown",
       })),
     });
   } catch (err) {
@@ -514,19 +556,27 @@ router.put("/campaigns/:id", async (req, res) => {
   const user = await requireUser(req, res);
   if (!user) return;
   const { id } = req.params;
-  const { name, jobTitle, company, version, exportedDate, status, location, salary, applyLink } = req.body ?? {};
+  const { name, jobTitle, company, version, exportedDate, status, location, salary, applyLink,
+    matchQuality, postedAt, remote, visaRequirement, applicationDeadline, resumeVersion, nextAction, atsVendor } = req.body ?? {};
   try {
     await ensureProfileTables();
     await pool.query(
-      `INSERT INTO user_campaigns (id, user_id, name, job_title, company, version, exported_date, status, location, salary, apply_link, updated_at, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now(),now())
+      `INSERT INTO user_campaigns (id, user_id, name, job_title, company, version, exported_date, status, location, salary, apply_link,
+         match_quality, posted_at, remote, visa_requirement, application_deadline, resume_version, next_action, ats_vendor, updated_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,now(),now())
        ON CONFLICT (id, user_id) DO UPDATE SET
          name = EXCLUDED.name, job_title = EXCLUDED.job_title,
          company = EXCLUDED.company, version = EXCLUDED.version,
          exported_date = EXCLUDED.exported_date, status = EXCLUDED.status,
          location = EXCLUDED.location, salary = EXCLUDED.salary,
-         apply_link = EXCLUDED.apply_link, updated_at = now()`,
-      [id, user.id, name, jobTitle, company, version ?? "v1", exportedDate ?? null, status ?? "Not Applied", location ?? "", salary ?? "", applyLink ?? null],
+         apply_link = EXCLUDED.apply_link, match_quality = EXCLUDED.match_quality,
+         posted_at = EXCLUDED.posted_at, remote = EXCLUDED.remote,
+         visa_requirement = EXCLUDED.visa_requirement, application_deadline = EXCLUDED.application_deadline,
+         resume_version = EXCLUDED.resume_version, next_action = EXCLUDED.next_action,
+         ats_vendor = EXCLUDED.ats_vendor, updated_at = now()`,
+      [id, user.id, name, jobTitle, company, version ?? "v1", exportedDate ?? null, status ?? "Not Applied", location ?? "", salary ?? "", applyLink ?? null,
+        matchQuality ?? null, postedAt ?? "", Boolean(remote), visaRequirement ?? "Not stated", applicationDeadline ?? "Not stated",
+        resumeVersion ?? version ?? "v1", nextAction ?? "Apply today", atsVendor ?? "Unknown"],
     );
     return res.json({ ok: true });
   } catch (err) {

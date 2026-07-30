@@ -1,4 +1,5 @@
 import type { JobResult } from "@/lib/api";
+import { extractJobMetadata, nextRequiredAction } from "@/lib/jobIntelligence";
 
 const API_BASE = "/api";
 let _token: string | null = null;
@@ -26,6 +27,14 @@ export interface CampaignRecord {
   location: string;
   salary: string;
   applyLink: string | null;
+  matchQuality?: number;
+  postedAt?: string;
+  remote?: boolean;
+  visaRequirement?: string;
+  applicationDeadline?: string;
+  resumeVersion?: string;
+  nextAction?: string;
+  atsVendor?: string;
 }
 
 const CAMPAIGNS_KEY_PREFIX = "resumex100_campaigns_v1";
@@ -97,6 +106,14 @@ async function syncCampaignToServer(campaign: CampaignRecord) {
         location: campaign.location,
         salary: campaign.salary,
         applyLink: campaign.applyLink,
+        matchQuality: campaign.matchQuality,
+        postedAt: campaign.postedAt,
+        remote: campaign.remote,
+        visaRequirement: campaign.visaRequirement,
+        applicationDeadline: campaign.applicationDeadline,
+        resumeVersion: campaign.resumeVersion,
+        nextAction: campaign.nextAction,
+        atsVendor: campaign.atsVendor,
       }),
     });
   } catch {
@@ -104,10 +121,11 @@ async function syncCampaignToServer(campaign: CampaignRecord) {
   }
 }
 
-export function upsertCampaignFromJob(userId: string | undefined | null, job: JobResult) {
+export function upsertCampaignFromJob(userId: string | undefined | null, job: JobResult, options?: { matchQuality?: number; resumeVersion?: string }) {
   if (!userId) return;
   const existing = loadCampaigns(userId);
   const previous = existing.find(record => record.id === job.id);
+  const metadata = extractJobMetadata(job);
   const next: CampaignRecord = {
     id: job.id,
     userId,
@@ -121,6 +139,14 @@ export function upsertCampaignFromJob(userId: string | undefined | null, job: Jo
     location: job.location || "Not specified",
     salary: job.salary || "Not specified",
     applyLink: job.applyLink,
+    matchQuality: options?.matchQuality ?? previous?.matchQuality,
+    postedAt: job.postedAt || previous?.postedAt || "",
+    remote: job.remote,
+    visaRequirement: metadata.visaRequirement,
+    applicationDeadline: metadata.applicationDeadline,
+    resumeVersion: options?.resumeVersion ?? previous?.resumeVersion ?? previous?.version ?? "v1",
+    nextAction: nextRequiredAction(previous?.status ?? "Not Applied"),
+    atsVendor: metadata.atsVendor,
   };
   persistCampaigns(userId, [next, ...existing.filter(record => record.id !== job.id)]);
   void syncCampaignToServer(next);
@@ -129,7 +155,7 @@ export function upsertCampaignFromJob(userId: string | undefined | null, job: Jo
 export function updateCampaignStatus(userId: string | undefined | null, id: string, status: CampaignStatus) {
   if (!userId) return [];
   const updated = loadCampaigns(userId).map(record =>
-    record.id === id ? { ...record, status, updatedAt: Date.now() } : record
+    record.id === id ? { ...record, status, nextAction: nextRequiredAction(status), updatedAt: Date.now() } : record
   );
   persistCampaigns(userId, updated);
   const changed = updated.find(r => r.id === id);
