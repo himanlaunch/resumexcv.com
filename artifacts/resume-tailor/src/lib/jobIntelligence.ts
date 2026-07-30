@@ -112,7 +112,10 @@ export function evidenceLevel(change: DiffChange): EvidenceLevel {
   if (change.evidenceLevel) return change.evidenceLevel;
   if (change.gapType === "true_gap") return "missing";
   if (change.gapType === "evidence") return "transferable";
-  return "verified";
+  // Only explicit keyword-only changes are safe for one-click acceptance.
+  // Unlabelled rewrites still need individual review because a model can omit gap metadata.
+  if (change.gapType === "keyword") return "verified";
+  return "transferable";
 }
 
 export function normalizeChangeForReview(change: DiffChange): DiffChange {
