@@ -80,6 +80,10 @@
     width: 100%;
     overflow-x: hidden;
   }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
   #root {
     min-height: 100vh;
     max-width: 100vw;
@@ -99,6 +103,47 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Titillium Web', ui-sans-serif, system-ui, sans-serif;
     letter-spacing: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .mobile-app-bar {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+
+  .mobile-workspace-main {
+    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
+  }
+
+  .mobile-bottom-nav {
+    min-height: calc(3.75rem + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-modal-panel {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .resume-preview {
+    overflow-wrap: anywhere;
+    padding: 20px 16px !important;
+  }
+
+  .resume-preview-row {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 1px !important;
+  }
+
+  .resume-preview-row > span {
+    max-width: 100%;
+    white-space: normal !important;
   }
 }
 
