@@ -642,14 +642,20 @@ function BuyCreditsModal({ open, onClose, credits, onCreditsUpdated }: { open: b
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="buy-credits-title"
+    >
       <div className="mobile-modal-panel max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl p-4 sm:rounded-2xl sm:p-5 md:p-6" style={{ backgroundColor: "#fff", border: "1px solid #E5E8EA", boxShadow: "0 20px 60px rgba(0,0,0,0.22)" }}>
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <h2 className="font-heading font-bold text-2xl" style={{ color: "#0A0A0A" }}>Buy resume credits</h2>
+            <h2 id="buy-credits-title" className="font-heading font-bold text-2xl" style={{ color: "#0A0A0A" }}>Buy resume credits</h2>
             <p className="text-sm mt-1" style={{ color: "#666" }}>Each tailored resume uses 1 credit.</p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>
+          <button type="button" onClick={onClose} aria-label="Close credits dialog" className="w-11 h-11 rounded-full flex items-center justify-center" style={{ backgroundColor: "#F0F0F0", color: "#555" }}>
             <X className="w-4 h-4" />
           </button>
         </div>
