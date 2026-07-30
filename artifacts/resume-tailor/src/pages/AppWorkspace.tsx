@@ -6,7 +6,8 @@ import {
   Clock, Briefcase, ArrowRight, ExternalLink, Zap, Copy,
   Mail, Sparkles, Pen, RotateCcw, Loader2, ThumbsUp, ThumbsDown,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Eye, EyeOff, TrendingUp, Share2, Columns2,
-  BookmarkCheck, Bookmark, Trash2, Link2
+  BookmarkCheck, Bookmark, Trash2, Link2,
+  Undo2, Redo2, History, BadgeCheck, GripVertical
 } from "lucide-react";
 import {
   type JobResult, type ResumeData, type JobData, type DiffChange,
@@ -24,6 +25,11 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { GapSuggestionPanel } from "@/components/GapSuggestionPanel";
 import { upsertCampaignFromJob, updateCampaignStatus, loadCampaigns, type CampaignStatus } from "@/lib/campaigns";
 import { sanitizeDiffChange, sanitizeResumeForExport, sanitizeResumeSkillText, sanitizeResumeText } from "@/lib/resumeSafety";
+import { WordDiff } from "@/components/WordDiff";
+import {
+  analyzeResume, atsGuidance, changeAtsImpact, detectAts, evidenceLevel,
+  normalizeChangeForReview, type ResumeConvention,
+} from "@/lib/jobIntelligence";
 
 type Step = 1 | 3 | 4 | 5;
 
@@ -31,6 +37,15 @@ type Step = 1 | 3 | 4 | 5;
 
 const STORAGE_KEY = "resume_tailor_saved_v2";
 const ANONYMOUS_STORAGE_SCOPE = "anonymous";
+
+function decodeBrowserCapture(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes)) as {
+    title?: string; company?: string; location?: string; description?: string; url?: string;
+  };
+}
 
 function storageKey(base: string, scope = ANONYMOUS_STORAGE_SCOPE) {
   return `${base}:${scope}`;
@@ -74,6 +89,9 @@ export interface SavedVersion {
   diffChanges?: DiffChange[];
   sourceJobId?: string | null;
   savedAt: number;
+  tags?: string[];
+  folder?: string;
+  convention?: ResumeConvention;
 }
 
 function loadVersions(scope = ANONYMOUS_STORAGE_SCOPE): SavedVersion[] {
@@ -315,11 +333,13 @@ function Sidebar({ step, setStep, completedSteps, resume, credits, onBuyCredits,
   );
 }
 
-function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: SavedVersion[]; onDeleteVersion: (id: string) => void }) {
+function MyResumesPage({ savedVersions, onDeleteVersion, onSaveVersion }: { savedVersions: SavedVersion[]; onDeleteVersion: (id: string) => void; onSaveVersion: (version: SavedVersion) => void }) {
   const [query, setQuery] = useState("");
   const [downloadingVersion, setDownloadingVersion] = useState<{ id: string; format: "pdf" | "docx" } | null>(null);
   const [previewingVersionId, setPreviewingVersionId] = useState<string | null>(null);
   const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null);
+  const [folderFilter, setFolderFilter] = useState("All folders");
+  const folders = useMemo(() => ["All folders", ...new Set(savedVersions.map(v => v.folder || "All resumes"))], [savedVersions]);
 
   const makeJob = (version: SavedVersion): JobResult => ({
     id: version.sourceJobId ?? version.id,
@@ -349,13 +369,15 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
   };
 
   const q = query.trim().toLowerCase();
+  const byFolder = folderFilter === "All folders" ? savedVersions : savedVersions.filter(v => (v.folder || "All resumes") === folderFilter);
   const filtered = q
-    ? savedVersions.filter(v =>
+    ? byFolder.filter(v =>
         v.name.toLowerCase().includes(q) ||
         v.jobTitle.toLowerCase().includes(q) ||
-        v.jobCompany.toLowerCase().includes(q)
+        v.jobCompany.toLowerCase().includes(q) ||
+        (v.tags ?? []).some(tag => tag.toLowerCase().includes(q))
       )
-    : savedVersions;
+    : byFolder;
 
   return (
     <div className="flex-1 p-3 sm:p-4 md:p-8 overflow-auto">
@@ -369,7 +391,8 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
           <p className="text-sm" style={{ color: "#666" }}>All your tailored resumes. Search by name, job title, or company.</p>
         </div>
 
-        <div className="relative mb-6">
+        <div className="grid sm:grid-cols-[1fr_190px] gap-3 mb-6">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
           <input
             type="text"
@@ -384,6 +407,11 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
               <X className="w-4 h-4" />
             </button>
           )}
+        </div>
+        <select value={folderFilter} onChange={e => setFolderFilter(e.target.value)} aria-label="Filter resume folder"
+          className="rounded-xl px-3 py-2.5 text-sm outline-none" style={{ backgroundColor: "#fff", border: "1px solid #E5E7EB" }}>
+          {folders.map(folder => <option key={folder}>{folder}</option>)}
+        </select>
         </div>
 
         {savedVersions.length === 0 ? (
@@ -466,6 +494,18 @@ function MyResumesPage({ savedVersions, onDeleteVersion }: { savedVersions: Save
                           </button>
                         )}
                       </div>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-2 mt-3">
+                      <label className="text-[11px] font-semibold" style={{ color: "#777" }}>
+                        Folder
+                        <input defaultValue={version.folder ?? "All resumes"} onBlur={e => onSaveVersion({ ...version, folder: e.target.value.trim() || "All resumes" })}
+                          className="mt-1 w-full rounded-lg px-2.5 py-2 text-xs outline-none" style={{ border: "1px solid #E5E8EA" }} />
+                      </label>
+                      <label className="text-[11px] font-semibold" style={{ color: "#777" }}>
+                        Tags
+                        <input defaultValue={(version.tags ?? []).join(", ")} onBlur={e => onSaveVersion({ ...version, tags: e.target.value.split(",").map(tag => tag.trim()).filter(Boolean) })}
+                          placeholder="frontend, priority" className="mt-1 w-full rounded-lg px-2.5 py-2 text-xs outline-none" style={{ border: "1px solid #E5E8EA" }} />
+                      </label>
                     </div>
                   </div>
                   {isPreviewing && (
@@ -614,11 +654,11 @@ function MobileBottomNav({ step, setStep, completedSteps }: { step: Step; setSte
           </button>
         );
       })}
-      <Link href="/campaigns"
+      <Link href="/command-center"
         className="flex-1 flex flex-col items-center justify-center gap-0.5"
         style={{ color: "#555" }}>
         <Briefcase className="w-4 h-4" />
-        <span style={{ fontSize: "0.6rem", fontWeight: 600, lineHeight: 1 }}>Track</span>
+        <span style={{ fontSize: "0.6rem", fontWeight: 600, lineHeight: 1 }}>Command</span>
       </Link>
     </nav>
   );
@@ -857,6 +897,11 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
   const [urlFetching, setUrlFetching] = useState(false);
   const [error, setError] = useState("");
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  const [entryMode, setEntryMode] = useState<"url" | "description">("url");
+  const [jobTitle, setJobTitle] = useState("");
+  const [jobCompany, setJobCompany] = useState("");
+  const [jobLocation, setJobLocation] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
 
   const urlLines = urlInput
     .split(/[\n,]+/)
@@ -900,7 +945,37 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
       onBuyCredits();
       return;
     }
-    onJobsFetched(fetchedJobs);
+    const unique = fetchedJobs.filter((job, index, all) =>
+      index === all.findIndex(other => `${other.company}|${other.title}|${other.applyLink}`.toLowerCase() === `${job.company}|${job.title}|${job.applyLink}`.toLowerCase())
+    );
+    if (unique.length < fetchedJobs.length) setError(`${fetchedJobs.length - unique.length} duplicate job${fetchedJobs.length - unique.length === 1 ? "" : "s"} removed.`);
+    onJobsFetched(unique);
+  };
+
+  const handlePastedDescription = () => {
+    if (!enabled) {
+      setError("Upload and parse your resume first.");
+      return;
+    }
+    if (!jobTitle.trim() || !jobCompany.trim() || jobDescription.trim().length < 80) {
+      setError("Add the job title, company, and a fuller job description.");
+      return;
+    }
+    onJobsFetched([{
+      id: `pasted-${Date.now()}`,
+      title: jobTitle.trim(),
+      company: jobCompany.trim(),
+      location: jobLocation.trim() || "Not specified",
+      via: "Pasted description",
+      description: jobDescription.trim(),
+      highlights: [],
+      postedAt: "",
+      salary: null,
+      remote: /\bremote\b/i.test(`${jobLocation} ${jobDescription}`),
+      scheduleType: "",
+      applyLink: null,
+      source: "custom",
+    }]);
   };
 
   return (
@@ -913,8 +988,8 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
       >
         <div className="flex items-center gap-2">
           <Link2 className="w-4 h-4" style={{ color: "#00c447" }} />
-          <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Have job links?</h3>
-          <span className="text-xs hidden md:inline" style={{ color: "#888" }}>Paste URLs to skip job search</span>
+          <h3 className="font-heading font-bold text-sm" style={{ color: "#0A0A0A" }}>Add a target job</h3>
+          <span className="text-xs hidden md:inline" style={{ color: "#888" }}>Paste a URL or job description</span>
         </div>
         <ChevronDown
           className="w-4 h-4 md:hidden transition-transform"
@@ -923,6 +998,18 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
       </button>
       <div className={mobileExpanded ? "block" : "hidden md:block"}>
       <div className="p-4 md:p-5">
+        <div className="grid grid-cols-2 gap-2 mb-4" role="tablist" aria-label="Job input method">
+          <button type="button" role="tab" aria-selected={entryMode === "url"} onClick={() => setEntryMode("url")}
+            className="px-3 py-2 rounded-xl text-xs font-semibold" style={{ backgroundColor: entryMode === "url" ? "#0A0A0A" : "#F0F0F0", color: entryMode === "url" ? "white" : "#555" }}>
+            Paste job URL
+          </button>
+          <button type="button" role="tab" aria-selected={entryMode === "description"} onClick={() => setEntryMode("description")}
+            className="px-3 py-2 rounded-xl text-xs font-semibold" style={{ backgroundColor: entryMode === "description" ? "#0A0A0A" : "#F0F0F0", color: entryMode === "description" ? "white" : "#555" }}>
+            Paste description
+          </button>
+        </div>
+        {entryMode === "url" ? (
+        <>
         <p className="text-xs mb-3" style={{ color: "#888" }}>
           Paste up to {MAX_CUSTOM_URLS} job posting URLs. We will fetch the descriptions and jump straight to Review & Confirm.
         </p>
@@ -970,6 +1057,21 @@ function DirectJobLinksPanel({ enabled, credits, onBuyCredits, onJobsFetched }: 
                 </span>
               </div>
             ))}
+          </div>
+        )}
+        </>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="Job title *" className="rounded-xl p-3 text-sm outline-none" style={{ border: "1.5px solid #D0D5DD" }} />
+              <input value={jobCompany} onChange={e => setJobCompany(e.target.value)} placeholder="Company *" className="rounded-xl p-3 text-sm outline-none" style={{ border: "1.5px solid #D0D5DD" }} />
+            </div>
+            <input value={jobLocation} onChange={e => setJobLocation(e.target.value)} placeholder="Location or Remote" className="w-full rounded-xl p-3 text-sm outline-none" style={{ border: "1.5px solid #D0D5DD" }} />
+            <textarea value={jobDescription} onChange={e => setJobDescription(e.target.value)} placeholder="Paste the full job description…" rows={7}
+              className="w-full rounded-xl p-3 text-sm resize-y outline-none" style={{ border: "1.5px solid #D0D5DD", lineHeight: 1.6 }} />
+            <button onClick={handlePastedDescription} disabled={!enabled}
+              className="btn-mint w-full sm:w-auto disabled:opacity-50"><ArrowRight className="w-4 h-4" /> Use this job</button>
+            {error && <p className="text-xs" style={{ color: "#DC2626" }}>{error}</p>}
           </div>
         )}
       </div>
@@ -1426,6 +1528,21 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
   const [roleSuggestionsOpen, setRoleSuggestionsOpen] = useState(false);
   const [reviewing, setReviewing] = useState<{ resume: ResumeData; recommendations: ParsedResumeResult["recommendations"]; fileName: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [draggedSection, setDraggedSection] = useState<string | null>(null);
+  const defaultSections = ["summary", "skills", "experience", "projects", "education", "certifications", "achievements"];
+  const sectionOrder = resume.sectionOrder?.length ? resume.sectionOrder : defaultSections;
+  const convention = resume.convention ?? "US";
+
+  const updateConvention = (value: ResumeConvention) => {
+    onUpdateResume({ ...resume, convention: value });
+  };
+  const moveSection = (target: string) => {
+    if (!draggedSection || draggedSection === target) return;
+    const next = sectionOrder.filter(section => section !== draggedSection);
+    next.splice(next.indexOf(target), 0, draggedSection);
+    onUpdateResume({ ...resume, sectionOrder: next });
+    setDraggedSection(null);
+  };
 
   const handleFile = async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -1547,6 +1664,26 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
           <p className="text-base" style={{ color: "#666" }}>Upload your resume, confirm target roles and locations, then search live postings matched to your experience.</p>
         </div>
 
+        <div className="card-base rounded-2xl p-4 mb-5">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="font-heading font-bold text-sm">Getting started</h2>
+            <span className="text-xs font-semibold" style={{ color: "#00a86b" }}>{uploaded ? (selectedLocations.length ? "3 of 4" : "2 of 4") : "0 of 4"} complete</span>
+          </div>
+          <div className="grid sm:grid-cols-4 gap-2">
+            {[
+              ["1", "Add resume", uploaded],
+              ["2", "Choose target roles", uploaded && selectedTitles.size > 0],
+              ["3", "Set location", selectedLocations.length > 0],
+              ["4", "Select or paste jobs", false],
+            ].map(([number, label, done]) => (
+              <div key={String(number)} className="flex items-center gap-2 p-2.5 rounded-xl" style={{ backgroundColor: done ? "#ECFFE0" : "#F8F9FA" }}>
+                <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: done ? "#00F0A0" : "#E5E7EB" }}>{done ? <Check className="w-3 h-3" /> : number}</span>
+                <span className="text-xs font-semibold" style={{ color: done ? "#005A3D" : "#666" }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {!uploaded ? (
           <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
@@ -1622,6 +1759,33 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
                   onClick={() => setReviewing({ resume, recommendations, fileName })}>Edit details</button>
                 <button className="text-xs font-semibold underline" style={{ color: "#555" }}
                   onClick={handleClearAndReupload}>Clear &amp; re-upload</button>
+              </div>
+            </div>
+
+            <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-4">
+              <div className="card-base rounded-2xl p-4">
+                <label className="text-xs font-bold block mb-2" style={{ color: "#555" }}>Resume convention</label>
+                <select value={convention} onChange={e => updateConvention(e.target.value as ResumeConvention)}
+                  className="w-full rounded-xl px-3 py-2.5 text-sm outline-none" style={{ border: "1px solid #D0D5DD", backgroundColor: "white" }}>
+                  {(["US", "UK", "EU", "Canada", "Australia"] as ResumeConvention[]).map(value => <option key={value}>{value}</option>)}
+                </select>
+                <p className="text-xs mt-2" style={{ color: "#888" }}>{atsGuidance("Unknown", convention).regional}</p>
+              </div>
+              <div className="card-base rounded-2xl p-4">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-bold" style={{ color: "#555" }}>Drag to order resume sections</span>
+                  <span className="text-xs" style={{ color: "#00a86b" }}>Autosaved</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sectionOrder.map(section => (
+                    <button key={section} draggable onDragStart={() => setDraggedSection(section)}
+                      onDragOver={event => event.preventDefault()} onDrop={() => moveSection(section)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold capitalize cursor-grab"
+                      style={{ backgroundColor: draggedSection === section ? "#ECFFE0" : "#F8F9FA", border: "1px solid #E5E8EA", color: "#555" }}>
+                      <GripVertical className="w-3 h-3" /> {section}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1947,6 +2111,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
   const [sortByMatch, setSortByMatch] = useState(false);
   const [minScore, setMinScore] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [duplicatesRemoved, setDuplicatesRemoved] = useState(0);
   const nextStart = useRef(0);
   const nextCursor = useRef<string | null>(null);
   const didFetch = useRef(false);
@@ -1970,12 +2135,27 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
         titles,
         location,
         { start, cursor: append ? nextCursor.current : null, dateFilter, limit: 10, pages: append ? 3 : 1, platforms },
-        !append ? (job) => setJobs(prev => [...prev, job]) : undefined
+        !append ? (job) => setJobs(prev => {
+          const key = `${job.company}|${job.title}|${job.location}`.toLowerCase().replace(/\s+/g, " ");
+          const duplicate = prev.some(existing => `${existing.company}|${existing.title}|${existing.location}`.toLowerCase().replace(/\s+/g, " ") === key);
+          if (duplicate) {
+            setDuplicatesRemoved(count => count + 1);
+            return prev;
+          }
+          return [...prev, job];
+        }) : undefined
       );
       if (append) {
         setJobs(prev => {
-          const existing = new Set(prev.map(j => j.id));
-          return [...prev, ...result.jobs.filter(j => !existing.has(j.id))];
+          const existing = new Set(prev.map(job => `${job.company}|${job.title}|${job.location}`.toLowerCase().replace(/\s+/g, " ")));
+          const unique = result.jobs.filter(job => {
+            const key = `${job.company}|${job.title}|${job.location}`.toLowerCase().replace(/\s+/g, " ");
+            if (existing.has(key)) return false;
+            existing.add(key);
+            return true;
+          });
+          setDuplicatesRemoved(count => count + result.jobs.length - unique.length);
+          return [...prev, ...unique];
         });
       }
       // Only advance the cursor on success so retries use the same offset
@@ -2026,6 +2206,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
     nextCursor.current = null;
     setSelected(new Set());
     setCurrentPage(1);
+    setDuplicatesRemoved(0);
     await doFetch(0, false, getServerDateFilter(timeFilter), [...activePlatforms]);
   };
 
@@ -2176,6 +2357,7 @@ function Step3Discovery({ titles, location, resume, autoSearchRun, onNext }: { t
           ? `Showing ${pageStart + 1}-${pageEnd} of ${visibleJobs.length} filtered jobs (${totalStr} loaded)`
           : `Showing 0 of ${totalStr}`,
         ...filterParts,
+        ...(duplicatesRemoved > 0 ? [`${duplicatesRemoved} duplicate${duplicatesRemoved === 1 ? "" : "s"} removed`] : []),
       ].filter(Boolean).join(" · ");
   const clearFilters = () => {
     setTimeFilter(null);
@@ -2644,6 +2826,11 @@ function ATSChecklistCard({ atsChecks, resume, onUpdateResume }: {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium" style={{ color: (c.ok || isSaved) ? "#333" : "#92400E" }}>{c.label}{isSaved ? " ✓ added" : ""}</p>
                 {c.detail && !isSaved && <p className="text-xs mt-0.5" style={{ color: "#888" }}>{c.detail}</p>}
+                {c.explanation && !isSaved && (
+                  <p className="text-xs mt-1.5 px-2.5 py-2 rounded-lg" style={{ color: "#475569", backgroundColor: "#F8FAFC" }}>
+                    <strong>Plain language:</strong> {c.explanation}
+                  </p>
+                )}
                 {editable && field && !isSaved && (
                   <div className="flex items-center gap-2 mt-2">
                     <input
@@ -2676,6 +2863,30 @@ function ATSChecklistCard({ atsChecks, resume, onUpdateResume }: {
   );
 }
 
+function GenerationProgress({ message }: { message: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const estimate = 75;
+  const percent = Math.min(92, Math.max(8, Math.round(elapsed / estimate * 100)));
+  const remaining = Math.max(5, estimate - elapsed);
+  return (
+    <div className="flex-1">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold" style={{ color: "#0A0A0A" }}>Tailoring your resume…</p>
+        <span className="text-xs whitespace-nowrap" style={{ color: "#666" }}>About {remaining}s remaining</span>
+      </div>
+      <p className="text-xs mt-0.5" style={{ color: "#888" }}>{message}</p>
+      <div className="h-1.5 rounded-full overflow-hidden mt-2" style={{ backgroundColor: "#E5E8EA" }}>
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${percent}%`, backgroundColor: "#00F0A0" }} />
+      </div>
+    </div>
+  );
+}
+
 // ── Tailoring result cache (survives tab-switch / iOS background kill) ─────────
 
 const TAILORING_CACHE_KEY = "resume_tailoring_cache_v1";
@@ -2698,11 +2909,15 @@ function loadTailoringCache(jobId: string): JobTailoringState | null {
     const entry = cache[jobId];
     if (!entry?.result) return null;
     if (Date.now() - (entry.savedAt ?? 0) > TAILORING_CACHE_TTL) return null;
-    return { status: "done", statusMsg: "", result: entry.result, rows: entry.rows ?? [], error: "" };
+    const rows = (entry.rows ?? []).map(row => {
+      if (row.status === "kept" || row.confirmed === true) return { ...row, evidenceLevel: evidenceLevel(row) };
+      return normalizeChangeForReview(row);
+    });
+    return { status: "done", statusMsg: "", result: { ...entry.result, changes: rows }, rows, error: "" };
   } catch { return null; }
 }
 
-function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCredits, onCreditsUpdated, user, onAutoSave, onUpdateResume }: { selectedJobs: JobResult[]; resume: ResumeData; creditSkipNotice: string; onNext: (diffs: Record<string, DiffChange[]>) => void; onBuyCredits: () => void; onCreditsUpdated: () => Promise<CreditBalance | null>; user: { id: string } | null; onAutoSave: (version: SavedVersion) => void; onUpdateResume: (r: ResumeData) => void; }) {
+function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCredits, onCreditsUpdated, onUpdateResume, savedVersions }: { selectedJobs: JobResult[]; resume: ResumeData; creditSkipNotice: string; onNext: (diffs: Record<string, DiffChange[]>) => void; onBuyCredits: () => void; onCreditsUpdated: () => Promise<CreditBalance | null>; user: { id: string } | null; onAutoSave: (version: SavedVersion) => void; onUpdateResume: (r: ResumeData) => void; savedVersions: SavedVersion[]; }) {
   const [activeJobId, setActiveJobId] = useState<string>(selectedJobs[0]?.id ?? "");
   const [jobStates, setJobStates] = useState<Record<string, JobTailoringState>>(() =>
     Object.fromEntries(selectedJobs.map(j => {
@@ -2744,26 +2959,15 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
       await tailorResume(resume, jobData, {
         onStatus: (msg) => setJobStates(prev => ({ ...prev, [job.id]: { ...prev[job.id], statusMsg: msg } })),
         onResult: (result) => {
-          const cleanChanges = (result.changes ?? []).map(sanitizeDiffChange).filter((change) => change.proposed || change.status !== "rewritten");
+          const cleanChanges = (result.changes ?? [])
+            .map(sanitizeDiffChange)
+            .filter((change) => change.proposed || change.status !== "rewritten")
+            .map(normalizeChangeForReview);
           const cleanResult = { ...result, changes: cleanChanges };
           const newState: JobTailoringState = { status: "done", statusMsg: "", result: cleanResult, rows: cleanChanges, error: "" };
           setJobStates(prev => ({ ...prev, [job.id]: newState }));
           saveTailoringCache(job.id, newState);
           void onCreditsUpdated();
-          // Auto-save immediately so the record exists even if user never reaches Step 5
-          if (user) {
-            onAutoSave({
-              id: `auto-${job.id}`,
-              name: `${job.company} — ${job.title}`,
-              resume: applyDiffs(resume, cleanChanges),
-              job,
-              jobTitle: job.title,
-              jobCompany: job.company,
-              diffChanges: cleanChanges,
-              sourceJobId: job.id,
-              savedAt: Date.now(),
-            });
-          }
         },
         onError: (err, code) => {
           if (code === "INSUFFICIENT_CREDITS" || /credit|buy credits|remaining/i.test(err ?? "")) onBuyCredits();
@@ -2827,19 +3031,57 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
     if (job) void runTailoring(job);
   }, [selectedJobs, runTailoring]);
 
+  const [reviewHistory, setReviewHistory] = useState<Record<string, { past: DiffChange[][]; future: DiffChange[][] }>>({});
+
+  const commitRows = useCallback((jobId: string, nextRows: DiffChange[], recordHistory = true) => {
+    const current = jobStatesRef.current[jobId];
+    if (!current) return;
+    if (recordHistory) {
+      setReviewHistory(previous => {
+        const history = previous[jobId] ?? { past: [], future: [] };
+        return { ...previous, [jobId]: { past: [...history.past, current.rows].slice(-50), future: [] } };
+      });
+    }
+    const nextState = { ...current, rows: nextRows, result: current.result ? { ...current.result, changes: nextRows } : current.result };
+    jobStatesRef.current = { ...jobStatesRef.current, [jobId]: nextState };
+    setJobStates(previous => ({ ...previous, [jobId]: nextState }));
+    saveTailoringCache(jobId, nextState);
+  }, []);
+
   const updateRow = (jobId: string, rowId: string, patch: Partial<DiffChange>) => {
-    setJobStates(prev => ({
-      ...prev,
-      [jobId]: { ...prev[jobId], rows: prev[jobId].rows.map(r => r.id === rowId ? { ...r, ...patch } : r) },
-    }));
+    const currentRows = jobStatesRef.current[jobId]?.rows ?? [];
+    commitRows(jobId, currentRows.map(row => row.id === rowId ? { ...row, ...patch } : row));
   };
+
+  const undoReview = useCallback((jobId: string) => {
+    const history = reviewHistory[jobId];
+    const current = jobStatesRef.current[jobId];
+    if (!history?.past.length || !current) return;
+    const previousRows = history.past[history.past.length - 1];
+    setReviewHistory(all => ({
+      ...all,
+      [jobId]: { past: history.past.slice(0, -1), future: [current.rows, ...history.future].slice(0, 50) },
+    }));
+    commitRows(jobId, previousRows, false);
+  }, [commitRows, reviewHistory]);
+
+  const redoReview = useCallback((jobId: string) => {
+    const history = reviewHistory[jobId];
+    const current = jobStatesRef.current[jobId];
+    if (!history?.future.length || !current) return;
+    const nextRows = history.future[0];
+    setReviewHistory(all => ({
+      ...all,
+      [jobId]: { past: [...history.past, current.rows].slice(-50), future: history.future.slice(1) },
+    }));
+    commitRows(jobId, nextRows, false);
+  }, [commitRows, reviewHistory]);
 
   const activeState = jobStates[activeJobId];
   const rows = activeState?.rows ?? [];
-  const pendingCount = rows.filter(r => r.status === "confirm" && !r.confirmed).length;
-  const totalConfirm = rows.filter(r => r.status === "confirm").length;
-  const confirmedCount = rows.filter(r => r.status === "confirm" && r.confirmed).length;
-  const progress = totalConfirm === 0 ? (activeState?.status === "done" ? 100 : 0) : Math.round((confirmedCount / totalConfirm) * 100);
+  const pendingCount = rows.filter(r => r.status !== "kept" && r.confirmed !== true).length;
+  const reviewedCount = rows.filter(r => r.confirmed === true).length;
+  const progress = rows.length === 0 ? (activeState?.status === "done" ? 100 : 0) : Math.round((reviewedCount / rows.length) * 100);
 
   // Compute projected match score based on which proposed changes are accepted.
   // Builds a virtual resume with accepted/confirmed proposed text, then re-runs computeMatchScore.
@@ -2851,53 +3093,24 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
     return computeMatchScore(activeJob, resume);
   }, [activeJob, resume]);
 
-  const projectedScore = useMemo(() => {
+  const projectedResume = useMemo(() => {
     if (!activeJob || !activeState?.result) return null;
-    // Build a projected resume by applying accepted rows
-    const projectedResume: ResumeData = {
-      ...resume,
-      summary: resume.summary,
-      skills: [...(resume.skills ?? [])],
-      experience: (resume.experience ?? []).map(e => ({ ...e, bullets: [...(e.bullets ?? [])] })),
-    };
-    for (const row of rows) {
-      const text = row.customText ?? row.proposed ?? "";
-      if (!text) continue;
-      if (row.status === "kept") continue;
-      if (row.status === "confirm" && !row.confirmed) continue;
-      if (row.section === "Summary") {
-        projectedResume.summary = text;
-      } else if (row.section === "Skills") {
-        // Inject new skill terms
-        const newSkills = text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
-        projectedResume.skills = [...new Set([...(projectedResume.skills ?? []), ...newSkills])];
-      } else {
-        // Experience bullet — use same fuzzy company matching as applyDiffs
-        const companyHint = row.section.replace(/^experience\s*[-–—:]\s*/i, "").trim().toLowerCase();
-        projectedResume.experience = (projectedResume.experience ?? []).map(e => {
-          const eComp = e.company.toLowerCase();
-          const matches = companyHint
-            ? eComp.includes(companyHint) || companyHint.includes(eComp)
-            : false;
-          if (!matches) return e;
-          const existingIdx = e.bullets?.findIndex(b => b === row.original);
-          if (existingIdx !== undefined && existingIdx >= 0) {
-            const bullets = [...(e.bullets ?? [])];
-            bullets[existingIdx] = text;
-            return { ...e, bullets };
-          }
-          return { ...e, bullets: [...(e.bullets ?? []), text] };
-        });
-      }
-    }
-    return computeMatchScore(activeJob, projectedResume);
+    return applyDiffs(resume, rows);
   }, [activeJob, activeState?.result, rows, resume]);
+  const projectedScore = useMemo(
+    () => activeJob && projectedResume ? computeMatchScore(activeJob, projectedResume) : null,
+    [activeJob, projectedResume],
+  );
+  const expandedAnalysis = useMemo(
+    () => activeJob && projectedResume ? analyzeResume(projectedResume, activeJob, resume.convention ?? "US") : null,
+    [activeJob, projectedResume, resume.convention],
+  );
 
   // All jobs must be done and have zero pending confirms before export unlocks
   const allJobsDone = selectedJobs.every(j => jobStates[j.id]?.status === "done");
   const totalPendingAllJobs = selectedJobs.reduce((sum, j) => {
     const jRows = jobStates[j.id]?.rows ?? [];
-    return sum + jRows.filter(r => r.status === "confirm" && !r.confirmed).length;
+    return sum + jRows.filter(r => r.status !== "kept" && r.confirmed !== true).length;
   }, 0);
   const allResolved = allJobsDone && totalPendingAllJobs === 0;
 
@@ -2910,13 +3123,14 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
     updateRow(activeJobId, rowId, { confirmed: true, status: newStatus });
   };
 
-  const handleConfirmAll = (accept: boolean) => {
-    rows
-      .filter(r => r.status === "confirm" && !r.confirmed)
-      .forEach(r => {
-        const hasSafeProposal = !!(r.customText ?? r.proposed ?? "").trim();
-        updateRow(activeJobId, r.id, { confirmed: true, status: accept && hasSafeProposal ? "rewritten" : "kept" });
-      });
+  const handleConfirmAll = (accept: boolean, verifiedOnly = false) => {
+    const next = rows.map(row => {
+      if (row.status === "kept" || row.confirmed === true) return row;
+      if (verifiedOnly && evidenceLevel(row) !== "verified") return row;
+      const hasSafeProposal = !!(row.customText ?? row.proposed ?? "").trim();
+      return { ...row, confirmed: true, status: accept && hasSafeProposal ? "rewritten" as const : "kept" as const };
+    });
+    commitRows(activeJobId, next);
   };
 
   const handleRetry = async (rowId: string) => {
@@ -2940,6 +3154,19 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
   const handleNextToGeneratedResumes = () => {
     onNext(Object.fromEntries(selectedJobs.map(j => [j.id, jobStates[j.id]?.rows ?? []])));
   };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, [contenteditable='true']")) return;
+      event.preventDefault();
+      if (event.shiftKey) redoReview(activeJobId);
+      else undoReview(activeJobId);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeJobId, redoReview, undoReview]);
 
   const atsChecks = activeState?.result?.atsChecks ?? [];
   const skillGaps = activeState?.result?.skillGaps;
@@ -2978,10 +3205,7 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         {activeState?.status === "loading" && (
           <div className="mb-5 p-4 rounded-xl flex items-center gap-3" style={{ backgroundColor: "#F8F9FA", border: "1px solid #E5E8EA" }}>
             <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" style={{ color: "#00c447" }} />
-            <div>
-              <p className="text-sm font-semibold" style={{ color: "#0A0A0A" }}>AI is analysing the job and your resume…</p>
-              <p className="text-xs mt-0.5" style={{ color: "#888" }}>{activeState.statusMsg}</p>
-            </div>
+            <GenerationProgress message={activeState.statusMsg} />
           </div>
         )}
         {activeState?.status === "error" && (
@@ -3040,11 +3264,12 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
                 {pendingCount > 0 && (
                   <>
                     <button
-                      onClick={() => handleConfirmAll(true)}
+                      onClick={() => handleConfirmAll(true, true)}
                       className="text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
                       style={{ backgroundColor: "#00F0A0", color: "#003D29", border: "1px solid rgba(0,240,160,0.6)" }}
                     >
-                      Accept all ({pendingCount})
+                      <BadgeCheck className="w-3.5 h-3.5 inline mr-1" />
+                      Accept verified changes only
                     </button>
                     <button
                       onClick={() => handleConfirmAll(false)}
@@ -3055,7 +3280,7 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
                     </button>
                   </>
                 )}
-                {pendingCount > 0 && <span className="text-xs font-medium" style={{ color: "#92400E" }}>{confirmedCount}/{totalConfirm} confirmed here</span>}
+                {pendingCount > 0 && <span className="text-xs font-medium" style={{ color: "#92400E" }}>{reviewedCount}/{rows.length} reviewed here</span>}
               </div>
             </div>
           );
@@ -3064,7 +3289,7 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
           <div className="mb-5 p-4 rounded-xl flex items-center justify-between gap-3 flex-wrap" style={{ backgroundColor: "#ECFFE0", border: "1px solid rgba(0,240,160,0.4)" }}>
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5" style={{ color: "#00c447" }} />
-              <span className="text-sm font-semibold" style={{ color: "#005A3D" }}>All changes confirmed — resume verified and ATS-safe</span>
+              <span className="text-sm font-semibold" style={{ color: "#005A3D" }}>Every proposed change has been accepted or rejected — ready to export</span>
             </div>
             <button className="btn-mint text-sm w-full sm:w-auto" onClick={handleNextToGeneratedResumes}>
               Next: Generated Resumes <ArrowRight className="w-4 h-4" />
@@ -3076,14 +3301,14 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         {activeState?.result && (
           <div className="flex flex-wrap gap-3 mb-5">
             {/* Match score: AI projected (primary) vs original baseline */}
-            {activeState.result.matchScore != null && baselineScore !== null && (
-              <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl" style={{ border: activeState.result.matchScore >= 85 ? "1.5px solid #00c447" : undefined }}>
+            {projectedScore != null && baselineScore !== null && (
+              <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl" style={{ border: projectedScore >= 85 ? "1.5px solid #00c447" : undefined }}>
                 <div>
-                  <div className="text-2xl font-bold font-heading" style={{ color: activeState.result.matchScore >= 85 ? "#00c447" : activeState.result.matchScore >= 70 ? "#D97706" : "#EF4444" }}>
-                    {activeState.result.matchScore}%
+                  <div className="text-2xl font-bold font-heading" style={{ color: projectedScore >= 85 ? "#00c447" : projectedScore >= 70 ? "#D97706" : "#EF4444" }}>
+                    {projectedScore}%
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: activeState.result.matchScore >= 85 ? "#00c447" : "#888" }}>
-                    {activeState.result.matchScore >= 85 ? "★ " : ""}Resume–Job Match
+                  <div className="text-xs mt-0.5" style={{ color: projectedScore >= 85 ? "#00c447" : "#888" }}>
+                    {projectedScore >= 85 ? "★ " : ""}Accepted-change match
                   </div>
                 </div>
                 <div className="text-xs pl-3" style={{ borderLeft: "1px solid #E5E8EA", color: "#aaa" }}>
@@ -3092,6 +3317,12 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
                     {baselineScore}%
                   </span>
                 </div>
+              </div>
+            )}
+            {activeJob && (
+              <div className="card-base px-5 py-3 rounded-xl">
+                <div className="text-sm font-bold" style={{ color: "#0A0A0A" }}>{detectAts(activeJob.applyLink)} ATS</div>
+                <div className="text-xs" style={{ color: "#888" }}>Format guidance detected from application URL</div>
               </div>
             )}
             <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl">
@@ -3113,12 +3344,41 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
 
         {/* Progress bar */}
         {activeState?.status === "done" && (
-          <div className="mb-3 flex items-center gap-2">
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "#E5E8EA" }}>
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: "#00F0A0" }} />
+          <div className="mb-3 flex items-center gap-3">
+            <div className="flex-1 flex items-center gap-2">
+              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "#E5E8EA" }}>
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: "#00F0A0" }} />
+              </div>
+              <span className="text-xs font-semibold whitespace-nowrap" style={{ color: "#888" }}>{progress}% reviewed</span>
             </div>
-            <span className="text-xs font-semibold" style={{ color: "#888" }}>{progress}% reviewed</span>
+
+            <div className="flex items-center gap-1">
+              <button aria-label="Undo review change" title="Undo (Ctrl/⌘ Z)" onClick={() => undoReview(activeJobId)} disabled={!reviewHistory[activeJobId]?.past.length}
+                className="p-2 rounded-lg disabled:opacity-30" style={{ backgroundColor: "white", border: "1px solid #E5E8EA" }}><Undo2 className="w-4 h-4" /></button>
+              <button aria-label="Redo review change" title="Redo (Ctrl/⌘ Shift Z)" onClick={() => redoReview(activeJobId)} disabled={!reviewHistory[activeJobId]?.future.length}
+                className="p-2 rounded-lg disabled:opacity-30" style={{ backgroundColor: "white", border: "1px solid #E5E8EA" }}><Redo2 className="w-4 h-4" /></button>
+            </div>
           </div>
+        )}
+
+        {activeState?.status === "done" && projectedResume && (
+          <details className="card-base rounded-2xl mb-5 overflow-hidden">
+            <summary className="cursor-pointer px-5 py-4 font-heading font-bold text-sm flex items-center gap-2">
+              <Columns2 className="w-4 h-4" style={{ color: "#00c447" }} />
+              Side-by-side full resume preview
+              <span className="ml-auto text-xs font-normal" style={{ color: "#888" }}>Only accepted changes appear on the right</span>
+            </summary>
+            <div className="grid lg:grid-cols-2 gap-px" style={{ backgroundColor: "#E5E8EA" }}>
+              <div className="p-4" style={{ backgroundColor: "#F8F9FA" }}>
+                <div className="text-xs font-bold uppercase mb-3" style={{ color: "#888" }}>Original</div>
+                <ResumePreview resume={resume} />
+              </div>
+              <div className="p-4" style={{ backgroundColor: "#FAFFF8" }}>
+                <div className="text-xs font-bold uppercase mb-3" style={{ color: "#005A3D" }}>Accepted version</div>
+                <ResumePreview resume={projectedResume} jobTitle={activeJob?.title} jobCompany={activeJob?.company} />
+              </div>
+            </div>
+          </details>
         )}
 
         {/* Column headers (desktop only) */}
@@ -3131,7 +3391,7 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         {/* Diff rows */}
         <div className="space-y-3 mb-8">
           {rows.map(row => (
-            <DiffRowCard key={row.id} row={row}
+            <DiffRowCard key={row.id} row={row} job={activeJob}
               onConfirm={(id, accept) => handleConfirm(id, accept)}
               onRetry={(id) => handleRetry(id)}
               onCustomText={(id, text) => handleCustomText(id, text)}
@@ -3162,16 +3422,37 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         )}
 
         {/* ATS checks */}
-        {atsChecks.length > 0 && (
-          <ATSChecklistCard atsChecks={atsChecks} resume={resume} onUpdateResume={onUpdateResume} />
+        {(expandedAnalysis?.checks.length || atsChecks.length > 0) && (
+          <ATSChecklistCard atsChecks={expandedAnalysis?.checks ?? atsChecks} resume={resume} onUpdateResume={onUpdateResume} />
+        )}
+
+        {savedVersions.length > 0 && (
+          <details className="card-base rounded-2xl mt-5 p-5">
+            <summary className="cursor-pointer font-heading font-bold text-sm flex items-center gap-2">
+              <History className="w-4 h-4" style={{ color: "#00c447" }} /> Resume version history
+              <span className="text-xs font-normal" style={{ color: "#888" }}>({savedVersions.length})</span>
+            </summary>
+            <div className="mt-4 space-y-2">
+              {savedVersions.slice(0, 8).map((version, index) => (
+                <div key={version.id} className="flex items-center justify-between gap-3 p-3 rounded-xl" style={{ backgroundColor: "#F8F9FA" }}>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate">{version.name}</div>
+                    <div className="text-xs" style={{ color: "#888" }}>v{savedVersions.length - index} · {new Date(version.savedAt).toLocaleString()}</div>
+                  </div>
+                  <span className="text-xs" style={{ color: "#666" }}>{version.jobCompany}</span>
+                </div>
+              ))}
+            </div>
+          </details>
         )}
       </div>
     </div>
   );
 }
 
-function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
+function DiffRowCard({ row, job, onConfirm, onRetry, onCustomText }: {
   row: DiffChange;
+  job?: JobResult;
   onConfirm: (id: string, accept: boolean) => void;
   onRetry: (id: string) => void;
   onCustomText: (id: string, text: string) => void;
@@ -3183,7 +3464,9 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
   // If the AI returned no proposed text (wiped by sanitizer or left blank), show a Retry prompt
   const proposedText = rawProposed;
   const hasSafeProposal = proposedText.length > 0;
-  const isPending = row.status === "confirm" && !row.confirmed;
+  const isPending = row.status !== "kept" && row.confirmed !== true;
+  const level = evidenceLevel(row);
+  const impact = changeAtsImpact(row, job);
   const [editText, setEditText] = useState(row.customText ?? row.proposed ?? "");
   const [editMode, setEditMode] = useState(false);
   // Sync editText when a Retry completes and row.proposed changes (but not while user is actively editing)
@@ -3209,6 +3492,9 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
           {row.customText && row.confirmed && <span className="chip-mint">Your text</span>}
           {!isPending && row.confirmed && !row.customText && row.status === "rewritten" && <span className="chip-green">Accepted</span>}
           {gapChip}
+          <span className={level === "verified" ? "chip-green" : level === "transferable" ? "chip-amber" : "chip-red"}>
+            {level === "verified" ? "Evidence verified" : level === "transferable" ? "Verify evidence" : "Missing evidence"}
+          </span>
         </div>
         {row.status !== "kept" && (
           <div className="flex items-center gap-1 flex-wrap">
@@ -3234,7 +3520,7 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-px" style={{ backgroundColor: "#F0F0F0" }}>
         <div className="diff-original p-4 text-sm leading-relaxed" style={{ color: "#444" }}>
           <div className="text-xs font-bold mb-1 uppercase tracking-wide md:hidden" style={{ color: "#888" }}>Original</div>
-          {row.original}
+          <WordDiff original={row.original ?? ""} proposed={proposedText} side="original" />
         </div>
         <div className="diff-requirement p-4 text-sm leading-relaxed" style={{ color: "#005A3D" }}>
           <div className="text-xs font-bold mb-1 uppercase tracking-wide" style={{ color: "#00c447", opacity: 0.8 }}>Job requires</div>
@@ -3266,7 +3552,13 @@ function DiffRowCard({ row, onConfirm, onRetry, onCustomText }: {
             <>
               {hasSafeProposal ? (
                 <>
-                  <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>{proposedText}</span>
+                  <span style={{ color: row.customText ? "#005A3D" : "#0A0A0A" }}>
+                    <WordDiff original={row.original ?? ""} proposed={proposedText} side="proposed" />
+                  </span>
+                  <div className="mt-3 p-2.5 rounded-lg text-xs" style={{ backgroundColor: "#F0FDF4", color: "#166534" }}>
+                    <strong>ATS effect{impact.delta ? `: up to +${impact.delta}` : ""}</strong> — {impact.explanation}
+                    {impact.keywords.length > 0 && <div className="mt-1">Matched terms: {impact.keywords.join(", ")}</div>}
+                  </div>
                   {isPending && (
                     <div className="flex flex-col sm:flex-row gap-2 mt-3">
                       <button onClick={() => onConfirm(row.id, true)}
@@ -3413,12 +3705,13 @@ function applyDiffs(base: ResumeData, rows: DiffChange[]): ResumeData {
     certifications: [...(base.certifications ?? [])],
     achievements: [...(base.achievements ?? [])],
     projects: (base.projects ?? []).map(p => ({ ...p, bullets: [...(p.bullets ?? [])] })),
+    sectionOrder: [...(base.sectionOrder ?? [])],
+    convention: base.convention,
   };
 
   for (const row of rows) {
-    // Apply all rewritten rows: AI auto-rewrites (confirmed=undefined) and user-accepted confirm rows (confirmed=true).
-    // Rejected rows become status="kept" and are correctly skipped. Unreviewed confirm rows remain status="confirm".
-    if (row.status !== "rewritten") continue;
+    // Safety invariant: only changes explicitly accepted by the user may reach previews or exports.
+    if (row.status !== "rewritten" || row.confirmed !== true) continue;
     const rawText = (row.customText ?? row.proposed).trim();
     const finalText = sanitizeResumeText(rawText);
     if (!finalText) continue;
@@ -4546,8 +4839,14 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
   }, [resume, selectedJobs, jobDiffs]);
 
   useEffect(() => {
-    selectedJobs.forEach(job => upsertCampaignFromJob(user?.id, job));
-  }, [selectedJobs, user?.id]);
+    selectedJobs.forEach(job => {
+      const tailored = applyDiffs(resume, jobDiffs[job.id] ?? []);
+      upsertCampaignFromJob(user?.id, job, {
+        matchQuality: computeMatchScore(job, tailored),
+        resumeVersion: `v${Math.max(1, savedVersionIds.size + 1)}`,
+      });
+    });
+  }, [selectedJobs, user?.id, resume, jobDiffs, savedVersionIds.size]);
 
   useEffect(() => {
     selectedJobs.forEach(job => {
@@ -4889,9 +5188,9 @@ function Step5Export({ selectedJobs, resume, jobDiffs, savedVersionIds, onSaveVe
         <div className="card-base p-5 rounded-2xl">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-heading font-bold text-sm flex items-center gap-2" style={{ color: "#0A0A0A" }}>
-              <Briefcase className="w-4 h-4" />Campaign Tracker
+              <Briefcase className="w-4 h-4" />Application Command Center
             </h3>
-            <Link href="/campaigns" className="text-xs font-semibold flex items-center gap-1" style={{ color: "#00c447" }}>
+            <Link href="/command-center" className="text-xs font-semibold flex items-center gap-1" style={{ color: "#00c447" }}>
               View all <ExternalLink className="w-3 h-3" />
             </Link>
           </div>
@@ -4943,6 +5242,7 @@ export default function AppWorkspace() {
   const [buyCreditsOpen, setBuyCreditsOpen] = useState(false);
   const [discoverySearchRun, setDiscoverySearchRun] = useState(0);
   const [creditSkipNotice, setCreditSkipNotice] = useState("");
+  const browserCaptureHandled = useRef(false);
 
   const refreshCredits = useCallback(async () => {
     if (!user) {
@@ -5007,6 +5307,9 @@ export default function AppWorkspace() {
           diffChanges: record.diffChanges,
           sourceJobId: record.sourceJobId,
           savedAt: record.savedAt,
+          tags: record.tags,
+          folder: record.folder,
+          convention: record.convention as ResumeConvention | undefined,
         }));
         setSavedVersions(versions);
         persistVersions(versions, user.id);
@@ -5063,6 +5366,43 @@ export default function AppWorkspace() {
     goTo(4);
   }, [refreshCredits, step]);
 
+  useEffect(() => {
+    if (browserCaptureHandled.current || authLoading || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const capture = params.get("capture");
+    const jobUrl = params.get("jobUrl");
+    if (!capture && !jobUrl) return;
+    browserCaptureHandled.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+    if (capture) {
+      try {
+        const data = decodeBrowserCapture(capture);
+        if (!data.title || !data.description) throw new Error("Incomplete capture");
+        void handleJobsReady([{
+          id: `extension-${Date.now()}`,
+          title: data.title,
+          company: data.company || "Company not detected",
+          location: data.location || "Not specified",
+          via: "ResumeX100 browser extension",
+          description: data.description,
+          highlights: [],
+          postedAt: "",
+          salary: null,
+          remote: /\bremote\b/i.test(`${data.location} ${data.description}`),
+          scheduleType: "",
+          applyLink: data.url || null,
+          source: "custom",
+        }]);
+      } catch {
+        setCreditSkipNotice("The browser capture was incomplete. Paste the job URL or description in Career Vault.");
+      }
+    } else if (jobUrl) {
+      void fetchJobFromUrl(jobUrl)
+        .then(job => handleJobsReady([job]))
+        .catch(() => setCreditSkipNotice("That job URL could not be imported. Paste the description instead."));
+    }
+  }, [authLoading, user, handleJobsReady]);
+
   const handleParsed = (r: ResumeData, recs: SavedResumeData["recommendations"], fileName: string | null) => {
     const data = { resume: r, recommendations: recs, fileName };
     setResume(r);
@@ -5102,6 +5442,9 @@ export default function AppWorkspace() {
         diffChanges: version.diffChanges,
         sourceJobId: version.sourceJobId,
         savedAt: version.savedAt,
+        tags: version.tags,
+        folder: version.folder,
+        convention: version.convention ?? version.resume.convention,
       }).catch(() => {});
     }
   };
@@ -5152,7 +5495,7 @@ export default function AppWorkspace() {
           </div>
         )}
         {showMyResumes ? (
-          <MyResumesPage savedVersions={savedVersions} onDeleteVersion={handleDeleteVersion} />
+          <MyResumesPage savedVersions={savedVersions} onDeleteVersion={handleDeleteVersion} onSaveVersion={(version) => { void handleSaveVersion(version); }} />
         ) : (
           <>
             {step === 1 && (
@@ -5188,7 +5531,7 @@ export default function AppWorkspace() {
                 )
                 : selectedJobs.length === 0
                   ? <NoDataGuard message="No jobs selected yet." action="Go to Job Discovery" onAction={() => navigateTo(3)} />
-                  : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} user={user} onAutoSave={handleSaveVersion} onUpdateResume={handleUpdateResume} />
+                  : <Step4Review selectedJobs={selectedJobs} resume={resume} creditSkipNotice={creditSkipNotice} onBuyCredits={() => setBuyCreditsOpen(true)} onCreditsUpdated={refreshCredits} onNext={(diffs) => { setJobDiffs(diffs); goTo(5); }} user={user} onAutoSave={handleSaveVersion} onUpdateResume={handleUpdateResume} savedVersions={savedVersions} />
             )}
             {step === 5 && (
               selectedJobs.length === 0

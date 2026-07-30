@@ -66,6 +66,9 @@ function App() {
             <Route path="/campaigns">
               <RequireAuth><Campaigns /></RequireAuth>
             </Route>
+            <Route path="/command-center">
+              <RequireAuth><Campaigns /></RequireAuth>
+            </Route>
             <Route path="/r/:id" component={SharedResume} />
             <Route path="/privacy" component={Privacy} />
             <Route path="/terms" component={Terms} />

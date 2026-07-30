@@ -38,6 +38,8 @@ export interface ResumeData {
   certifications?: string[];
   achievements?: string[];
   projects?: { name: string; period?: string; bullets?: string[] }[];
+  sectionOrder?: string[];
+  convention?: "US" | "UK" | "EU" | "Canada" | "Australia";
 }
 
 export interface JobData {
@@ -58,6 +60,8 @@ export interface DiffChange {
   status: "rewritten" | "kept" | "confirm";
   gapType?: null | "keyword" | "evidence" | "true_gap";
   gapNote?: string;
+  evidenceLevel?: "verified" | "transferable" | "missing";
+  atsImpact?: { scoreDelta?: number; keywords?: string[]; explanation?: string };
   // UI state (not from server)
   confirmed?: boolean;
   retrying?: boolean;
@@ -79,6 +83,9 @@ export interface ATSCheck {
   category: string;
   label: string;
   detail: string;
+  explanation?: string;
+  score?: number;
+  severity?: "pass" | "warning" | "fail";
 }
 
 export interface PricingPlan {
@@ -119,6 +126,9 @@ export interface GeneratedResumeRecord {
   diffChanges?: DiffChange[];
   sourceJobId?: string | null;
   savedAt: number;
+  tags?: string[];
+  folder?: string;
+  convention?: string;
 }
 
 export async function getBillingPrices(): Promise<{ source: "fallback" | "stripe"; prices: PricingPlan[] }> {
