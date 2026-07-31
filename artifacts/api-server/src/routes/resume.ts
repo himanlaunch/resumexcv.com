@@ -11,6 +11,7 @@ import {
   fastLlmModel,
   llm,
   llmProviderLabel,
+  openRouterJsonHealing,
   openRouterRouting,
   resumeCustomizationModel,
 } from "../lib/llm.js";
@@ -367,6 +368,7 @@ async function repairTailoringJson(malformedJson: string, parseError: unknown): 
   const completion = await llm.chat.completions.create({
     model: fastLlmModel,
     ...openRouterRouting({ structured: true }),
+    ...openRouterJsonHealing(),
     messages: [
       {
         role: "system",
@@ -464,6 +466,7 @@ router.post("/parse", upload.single("file"), async (req, res) => {
     const completion = await llm.chat.completions.create({
       model: fastLlmModel,
       ...openRouterRouting({ structured: true }),
+      ...openRouterJsonHealing(),
       max_tokens: 8192,
       messages: [
         {
@@ -775,6 +778,7 @@ router.post("/suggest-gap-experience", async (req, res) => {
     const completion = await llm.chat.completions.create({
       model: fastLlmModel,
       ...openRouterRouting({ structured: true }),
+      ...openRouterJsonHealing(),
       max_tokens: 512,
       messages: [
         {
@@ -846,6 +850,7 @@ router.post("/retry-change", async (req, res) => {
     const completion = await llm.chat.completions.create({
       model: resumeCustomizationModel,
       ...openRouterRouting({ structured: true }),
+      ...openRouterJsonHealing(),
       max_tokens: 512,
       messages: [
         { role: "system", content: SYSTEM_TAILORING },

@@ -3,7 +3,12 @@ import { Router } from "express";
 import crypto from "crypto";
 import { logger } from "../lib/logger.js";
 import { pool } from "@workspace/db";
-import { fastLlmModel, llm, openRouterRouting } from "../lib/llm.js";
+import {
+  fastLlmModel,
+  llm,
+  openRouterJsonHealing,
+  openRouterRouting,
+} from "../lib/llm.js";
 
 // SSRF guard — blocks requests to private/loopback IP ranges and non-http(s) schemes
 function isSafePublicUrl(rawUrl: string): boolean {
@@ -774,6 +779,7 @@ router.post("/from-url", async (req, res) => {
       const completion = await llm.chat.completions.create({
         model: fastLlmModel,
         ...openRouterRouting({ structured: true }),
+        ...openRouterJsonHealing(),
         max_tokens: 900,
         messages: [
           {
