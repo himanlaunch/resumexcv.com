@@ -1623,9 +1623,8 @@ function Step1Vault({ resume, savedData, savedVersions, credits, onBuyCredits, o
     setParseError(null);
     setLoading(true);
     setFileName(file.name);
-    setLoadingMsg("Extracting text from your resume…");
+    setLoadingMsg("Reading text and scanned pages…");
     try {
-      setLoadingMsg("AI is parsing your resume…");
       const result = await parseResume(file);
       // Show review step before committing to vault
       setReviewing({ resume: result.resume, recommendations: result.recommendations, fileName: file.name });
