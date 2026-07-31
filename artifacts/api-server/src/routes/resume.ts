@@ -464,7 +464,7 @@ router.post("/parse", upload.single("file"), async (req, res) => {
     const completion = await llm.chat.completions.create({
       model: fastLlmModel,
       ...openRouterRouting({ structured: true }),
-      max_completion_tokens: 8192,
+      max_tokens: 8192,
       messages: [
         {
           role: "system",
@@ -522,7 +522,7 @@ ${text.slice(0, MAX_RESUME_PARSE_CHARS)}`,
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw);
+    const parsed = parseJsonObject<any>(raw);
     // Sanitize before returning and caching so dedup/classification always applies
     if (parsed?.resume) {
       parsed.resume = sanitizeResumeRecord(parsed.resume);
@@ -775,7 +775,7 @@ router.post("/suggest-gap-experience", async (req, res) => {
     const completion = await llm.chat.completions.create({
       model: fastLlmModel,
       ...openRouterRouting({ structured: true }),
-      max_completion_tokens: 512,
+      max_tokens: 512,
       messages: [
         {
           role: "system",
@@ -846,7 +846,7 @@ router.post("/retry-change", async (req, res) => {
     const completion = await llm.chat.completions.create({
       model: resumeCustomizationModel,
       ...openRouterRouting({ structured: true }),
-      max_completion_tokens: 512,
+      max_tokens: 512,
       messages: [
         { role: "system", content: SYSTEM_TAILORING },
         {
@@ -897,7 +897,7 @@ router.post("/cover-letter", async (req, res) => {
     const stream = await llm.chat.completions.create({
       model: resumeCustomizationModel,
       ...openRouterRouting(),
-      max_completion_tokens: 1024,
+      max_tokens: 1024,
       messages: [
         {
           role: "system",
