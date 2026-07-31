@@ -54,6 +54,18 @@ export function openRouterRouting({
   };
 }
 
+/**
+ * Ask OpenRouter to repair common JSON formatting mistakes before returning a
+ * non-streaming structured response. The plugin is not supported for streams.
+ */
+export function openRouterJsonHealing(): Record<string, unknown> {
+  if (!usingOpenRouter) return {};
+
+  return {
+    plugins: [{ id: "response-healing" }],
+  };
+}
+
 export function llmProviderLabel(): string {
   return usingOpenRouter ? "OpenRouter" : "DigitalOcean";
 }
