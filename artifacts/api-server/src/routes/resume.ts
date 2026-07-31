@@ -3,11 +3,10 @@ import { Router } from "express";
 import { createHash } from "crypto";
 import { logger } from "../lib/logger.js";
 import multer from "multer";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
-import mammoth from "mammoth";
 import { pool } from "@workspace/db";
 import { getSupabaseUser } from "../lib/auth.js";
 import { consumeResumeCredit, InsufficientCreditsError, refundResumeCredit } from "../lib/credits.js";
+import { extractResumeText, ResumeTextExtractionError } from "../lib/resumeText.js";
 import {
   fastLlmModel,
   llm,
@@ -421,32 +420,17 @@ router.post("/parse", upload.single("file"), async (req, res) => {
   const file = req.file;
   if (!file) return res.status(400).json({ error: "No file uploaded. Send a resume file in the 'file' field." });
 
-  const ext = file.originalname.split(".").pop()?.toLowerCase() ?? "";
-  const mime = file.mimetype;
-  let text = "";
-
+  let text: string;
   try {
-    if (mime === "application/pdf" || ext === "pdf") {
-      const data = await pdfParse(file.buffer);
-      text = data.text;
-    } else if (
-      mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-      ext === "docx"
-    ) {
-      const result = await mammoth.extractRawText({ buffer: file.buffer });
-      text = result.value;
-    } else if (mime === "text/plain" || ext === "txt") {
-      text = file.buffer.toString("utf-8");
-    } else {
-      return res.status(400).json({ error: `Unsupported file type ".${ext}". Please upload a PDF, DOCX, or TXT file.` });
-    }
+    const extracted = await extractResumeText(file);
+    text = extracted.text;
+    logger.info({ source: extracted.source, bytes: file.buffer.length }, "Resume text extracted");
   } catch (extractErr) {
-    logger.error({ extractErr }, "Text extraction failed");
-    return res.status(400).json({ error: "Could not extract text from the file. Make sure it is not a scanned-image PDF." });
-  }
-
-  if (!text.trim()) {
-    return res.status(400).json({ error: "No text found in the file. Make sure it is not a scanned-image PDF." });
+    if (extractErr instanceof ResumeTextExtractionError) {
+      return res.status(400).json({ error: extractErr.message, code: extractErr.code });
+    }
+    logger.error({ extractErr }, "Unexpected resume text extraction failure");
+    return res.status(500).json({ error: "Resume extraction failed unexpectedly. Please try again." });
   }
 
   const fileHash = createHash("sha256").update(file.buffer).digest("hex");
