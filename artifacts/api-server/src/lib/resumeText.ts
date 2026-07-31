@@ -82,7 +82,7 @@ async function recoverPdfWithOpenRouter(file: UploadedResumeFile): Promise<strin
   const completion = await llm.chat.completions.create({
     model: fastLlmModel,
     ...openRouterRouting(),
-    max_completion_tokens: 12000,
+    max_tokens: 12000,
     messages: [
       {
         role: "system",

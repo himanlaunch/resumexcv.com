@@ -774,7 +774,7 @@ router.post("/from-url", async (req, res) => {
       const completion = await llm.chat.completions.create({
         model: fastLlmModel,
         ...openRouterRouting({ structured: true }),
-        max_completion_tokens: 900,
+        max_tokens: 900,
         messages: [
           {
             role: "system",
