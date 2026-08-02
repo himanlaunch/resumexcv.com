@@ -24,6 +24,24 @@ const SOFT_SKILLS = [
   "project management", "time management", "customer focus", "strategic thinking",
 ];
 
+// ATS wording varies between noun, verb, and closely equivalent phrases. Keep
+// these explicit so the score recognizes real evidence without guessing at
+// unrelated synonyms or relying on an opaque model-generated score.
+const TERM_ALIASES: Record<string, string[]> = {
+  communication: ["communicate", "communicated", "communications", "presented", "executive reporting"],
+  collaboration: ["collaborate", "collaborated", "partnered", "cross team", "cross functional"],
+  leadership: ["led", "managed", "mentored", "owned"],
+  mentoring: ["mentor", "mentored", "coached"],
+  "stakeholder management": ["stakeholder collaboration", "stakeholder enablement", "stakeholders"],
+  "problem solving": ["problem solving", "solved", "resolved", "troubleshooting"],
+  "cross-functional": ["cross functional", "cross team", "partnered"],
+  ownership: ["owned", "owner"],
+  presentation: ["presented", "executive reporting", "visual narratives"],
+  "project management": ["managed projects", "managed programs", "program management"],
+  "customer focus": ["customer focused", "customer experience", "client service"],
+  "strategic thinking": ["strategic", "strategy"],
+};
+
 function normalize(value: string | undefined | null) {
   return String(value ?? "").toLowerCase().replace(/[^\p{L}\p{N}+#.]+/gu, " ").replace(/\s+/g, " ").trim();
 }
@@ -171,7 +189,11 @@ export function changeAtsImpact(change: DiffChange, job: JobResult | undefined) 
 
 function findTerms(text: string, list: string[]) {
   const normalized = normalize(text);
-  return list.filter(term => normalized.includes(normalize(term)));
+  const padded = ` ${normalized} `;
+  return list.filter(term => {
+    const variants = [term, ...(TERM_ALIASES[term] ?? [])].map(normalize).filter(Boolean);
+    return variants.some(variant => padded.includes(` ${variant} `));
+  });
 }
 
 function tokenKeywords(text: string) {
