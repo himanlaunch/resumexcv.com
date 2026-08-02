@@ -8,7 +8,7 @@ import {
   Mail, Sparkles, Pen, RotateCcw, Loader2, ThumbsUp, ThumbsDown,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Eye, EyeOff, TrendingUp, Share2, Columns2,
   BookmarkCheck, Bookmark, Trash2, Link2,
-  Undo2, Redo2, History, BadgeCheck, GripVertical
+  Undo2, Redo2, History, GripVertical
 } from "lucide-react";
 import {
   type JobResult, type ResumeData, type JobData, type DiffChange,
@@ -28,7 +28,7 @@ import { upsertCampaignFromJob, updateCampaignStatus, loadCampaigns, type Campai
 import { sanitizeDiffChange, sanitizeResumeForExport, sanitizeResumeSkillText, sanitizeResumeText } from "@/lib/resumeSafety";
 import { WordDiff } from "@/components/WordDiff";
 import {
-  analyzeResume, atsGuidance, changeAtsImpact, detectAts, evidenceLevel,
+  analyzeResume, applyAllEvidenceBackedChanges, atsGuidance, changeAtsImpact, detectAts, evidenceLevel,
   normalizeChangeForReview, type ResumeConvention,
 } from "@/lib/jobIntelligence";
 
@@ -2958,7 +2958,7 @@ function GenerationProgress({ message }: { message: string }) {
 
 // ── Tailoring result cache (survives tab-switch / iOS background kill) ─────────
 
-const TAILORING_CACHE_KEY = "resume_tailoring_cache_v1";
+const TAILORING_CACHE_KEY = "resume_tailoring_cache_v2_evidence_backed_90";
 const TAILORING_CACHE_TTL = 4 * 3600 * 1000; // 4 hours
 
 function saveTailoringCache(jobId: string, state: JobTailoringState) {
@@ -3159,21 +3159,24 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
   // Baseline = token score of the original resume before any tailoring
   const baselineScore = useMemo(() => {
     if (!activeJob) return null;
-    return computeMatchScore(activeJob, resume);
+    return analyzeResume(resume, activeJob, resume.convention ?? "US").score;
   }, [activeJob, resume]);
 
   const projectedResume = useMemo(() => {
     if (!activeJob || !activeState?.result) return null;
     return applyDiffs(resume, rows);
   }, [activeJob, activeState?.result, rows, resume]);
-  const projectedScore = useMemo(
-    () => activeJob && projectedResume ? computeMatchScore(activeJob, projectedResume) : null,
-    [activeJob, projectedResume],
-  );
   const expandedAnalysis = useMemo(
     () => activeJob && projectedResume ? analyzeResume(projectedResume, activeJob, resume.convention ?? "US") : null,
     [activeJob, projectedResume, resume.convention],
   );
+  const projectedScore = expandedAnalysis?.score ?? null;
+
+  const oneClickRows = useMemo(() => applyAllEvidenceBackedChanges(rows), [rows]);
+  const oneClickScore = useMemo(() => {
+    if (!activeJob || !activeState?.result) return null;
+    return analyzeResume(applyDiffs(resume, oneClickRows), activeJob, resume.convention ?? "US").score;
+  }, [activeJob, activeState?.result, oneClickRows, resume]);
 
   // All jobs must be done and have zero pending confirms before export unlocks
   const allJobsDone = selectedJobs.every(j => jobStates[j.id]?.status === "done");
@@ -3192,14 +3195,16 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
     updateRow(activeJobId, rowId, { confirmed: true, status: newStatus });
   };
 
-  const handleConfirmAll = (accept: boolean, verifiedOnly = false) => {
+  const handleRejectAll = () => {
     const next = rows.map(row => {
       if (row.status === "kept" || row.confirmed === true) return row;
-      if (verifiedOnly && evidenceLevel(row) !== "verified") return row;
-      const hasSafeProposal = !!(row.customText ?? row.proposed ?? "").trim();
-      return { ...row, confirmed: true, status: accept && hasSafeProposal ? "rewritten" as const : "kept" as const };
+      return { ...row, confirmed: true, status: "kept" as const };
     });
     commitRows(activeJobId, next);
+  };
+
+  const handleApplyAllEvidenceBacked = () => {
+    commitRows(activeJobId, oneClickRows);
   };
 
   const handleRetry = async (rowId: string) => {
@@ -3246,7 +3251,7 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         <div className="mb-6">
           <div className="chip-mint inline-flex mb-3">Step 3 of 4</div>
           <h1 className="font-heading font-bold text-2xl md:text-3xl mb-2" style={{ color: "#0A0A0A" }}>Review & Confirm</h1>
-          <p className="text-base" style={{ color: "#666" }}>Every LLM-proposed change needs your approval. Accept, reject, retry, or write your own text. Export is blocked until all confirmed.</p>
+          <p className="text-base" style={{ color: "#666" }}>Apply every evidence-backed change in one click, or review, edit, retry, and reject suggestions individually. Unsupported claims are never added automatically.</p>
         </div>
 
         {/* Job tabs */}
@@ -3333,15 +3338,15 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
                 {pendingCount > 0 && (
                   <>
                     <button
-                      onClick={() => handleConfirmAll(true, true)}
+                      onClick={handleApplyAllEvidenceBacked}
                       className="text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
                       style={{ backgroundColor: "#00F0A0", color: "#003D29", border: "1px solid rgba(0,240,160,0.6)" }}
                     >
-                      <BadgeCheck className="w-3.5 h-3.5 inline mr-1" />
-                      Accept verified changes only
+                      <Sparkles className="w-3.5 h-3.5 inline mr-1" />
+                      Apply all supported changes{oneClickScore != null ? ` · ${oneClickScore}%` : ""}
                     </button>
                     <button
-                      onClick={() => handleConfirmAll(false)}
+                      onClick={handleRejectAll}
                       className="text-xs font-semibold px-3 py-1.5 rounded-full transition-colors"
                       style={{ backgroundColor: "white", color: "#92400E", border: "1px solid #FDE68A" }}
                     >
@@ -3369,15 +3374,15 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
         {/* Match score + seniority */}
         {activeState?.result && (
           <div className="flex flex-wrap gap-3 mb-5">
-            {/* Match score: AI projected (primary) vs original baseline */}
+            {/* Match score: accepted changes only, using the detailed ATS analysis */}
             {projectedScore != null && baselineScore !== null && (
-              <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl" style={{ border: projectedScore >= 85 ? "1.5px solid #00c447" : undefined }}>
+              <div className="card-base px-5 py-3 flex items-center gap-3 rounded-xl" style={{ border: projectedScore >= 90 ? "1.5px solid #00c447" : undefined }}>
                 <div>
-                  <div className="text-2xl font-bold font-heading" style={{ color: projectedScore >= 85 ? "#00c447" : projectedScore >= 70 ? "#D97706" : "#EF4444" }}>
+                  <div className="text-2xl font-bold font-heading" style={{ color: projectedScore >= 90 ? "#00c447" : projectedScore >= 70 ? "#D97706" : "#EF4444" }}>
                     {projectedScore}%
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: projectedScore >= 85 ? "#00c447" : "#888" }}>
-                    {projectedScore >= 85 ? "★ " : ""}Accepted-change match
+                  <div className="text-xs mt-0.5" style={{ color: projectedScore >= 90 ? "#00c447" : "#888" }}>
+                    {projectedScore >= 90 ? "★ 90%+ target reached" : "Accepted-change match"}
                   </div>
                 </div>
                 <div className="text-xs pl-3" style={{ borderLeft: "1px solid #E5E8EA", color: "#aaa" }}>
@@ -3408,6 +3413,18 @@ function Step4Review({ selectedJobs, resume, creditSkipNotice, onNext, onBuyCred
                 </ul>
               </div>
             )}
+          </div>
+        )}
+
+        {allResolved && projectedScore != null && projectedScore < 90 && (
+          <div className="mb-5 p-4 rounded-xl flex items-start gap-3" style={{ backgroundColor: "#FFFBEB", border: "1px solid #FDE68A" }}>
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#D97706" }} />
+            <div>
+              <p className="text-sm font-semibold" style={{ color: "#92400E" }}>All evidence-backed changes are applied. Current truthful match: {projectedScore}%.</p>
+              <p className="text-xs mt-1" style={{ color: "#92400E" }}>
+                A 90% score is not reached because the source resume does not verify every job requirement. Missing skills are shown below so you can add them only if they are accurate.
+              </p>
+            </div>
           </div>
         )}
 

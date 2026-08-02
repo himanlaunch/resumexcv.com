@@ -17,6 +17,7 @@ import {
 } from "../lib/llm.js";
 
 const router = Router();
+const TAILORING_PROMPT_VERSION = "v2-evidence-backed-90-target";
 
 // ── Shared system prompt ──────────────────────────────────────────────────────
 const SYSTEM_TAILORING = `You are an expert resume writer and ATS specialist.
@@ -33,7 +34,8 @@ STRICT RULES — you must follow these without exception:
 8. Output ONLY valid JSON — no markdown fences, no commentary outside JSON.
 9. NEVER copy job description sentences verbatim into proposed bullets. Always rephrase in the candidate's voice, grounded in their actual experience.
 10. Preserve the candidate's natural seniority and voice. Prefer concise accomplishment statements over generic duties, and do not inflate leadership scope.
-11. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.`;
+11. BANNED PHRASES — never use these AI-filler/buzzword phrases in any proposed text: "results-driven", "results driven", "passionate about", "seasoned professional", "spearheaded", "orchestrated", "leveraged synergies", "dynamic team player", "thought leader", "game-changer", "game changer", "detail-oriented", "detail oriented", "go-getter", "go getter", "proactive", "innovative", "synergize", "synergized", "circle back", "bandwidth", "paradigm shift", "move the needle", "deep dive", "best-in-class", "best in class", "world-class", "world class". Use specific, concrete language instead.
+12. Target a 90% or higher ATS match only when the candidate's supplied evidence supports it. Truthfulness always wins: flag unsupported requirements as true gaps and never invent content to force the score above 90.`;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const MAX_RESUME_PARSE_CHARS = 24000;
@@ -570,7 +572,7 @@ router.post("/tailor", async (req, res) => {
   }
 
   const tailorCacheKey = createHash("sha256")
-    .update(JSON.stringify(resume) + (job.id ?? job.title) + job.company + (job.description ?? "").slice(0, 500))
+    .update(TAILORING_PROMPT_VERSION + JSON.stringify(resume) + (job.id ?? job.title) + job.company + (job.description ?? "").slice(0, 500))
     .digest("hex")
     .slice(0, 40);
 
@@ -952,7 +954,7 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
   return `Tailor this resume for the job below. Return a JSON object with this exact shape:
 
 {
-  "matchScore": <number 0-100 — the PROJECTED keyword match AFTER the user accepts all your proposed changes. Aim for 85-95. This is not the current score; it is the score the resume will have once all rewrites are applied.>,
+  "matchScore": <number 0-100 — the PROJECTED keyword match AFTER the user accepts all evidence-backed proposed changes. Target 90-95 when the supplied resume supports it. This is not the current score.>,
   "seniorityMatch": <"perfect" | "stretch" | "overqualified">,
   "changes": [
     {
@@ -975,12 +977,12 @@ function buildTailoringPrompt(resume: ResumeRecord, job: JobRecord): string {
 }
 
 TAILORING RULES — follow all of these:
-1. Coverage target: your proposed changes must collectively inject at least 85% of the job's important keywords into the resume. Review the job description carefully and identify every significant keyword, skill, tool, methodology, and requirement. Rewrite bullets and the summary to naturally incorporate them.
+1. Coverage target: your proposed changes must collectively cover at least 90% of the job's important supported keywords. Review the job description carefully and identify every significant keyword, skill, tool, methodology, and requirement. Rewrite bullets and the summary to naturally incorporate every term that is supported by the source resume. If truthful evidence makes 90% impossible, maximize supported coverage and list the remaining requirements as true gaps.
 2. Rewrite every experience bullet that can be made more relevant — do not leave relevant bullets unchanged when they could be keyword-enriched.
 3. Rewrite the summary as 2–3 complete narrative sentences that communicate the candidate's value proposition, years of experience, key domains, and top 2–3 job requirements. Write as prose — do NOT use comma-separated skill lists inside the summary (e.g. avoid "Skilled in X, Y, Z, A, B, C" patterns).
 4. Add or rewrite Skills entries to match the job's technology/tool requirements that the candidate demonstrably has. For Skills changes, "original" must be the exact individual skill text as it appears in the resume (one skill per change row). Do NOT combine multiple skills or categories into a single "proposed" value.
-5. Every job requirement should map to at least one "proposed" change. If no existing bullet covers a requirement, create a new "confirm" bullet the candidate can accept or edit.
-6. matchScore MUST reflect the score AFTER all changes are accepted — not the current score. Calculate it by estimating what percentage of the job's key requirements your proposed text covers.
+5. Every supported job requirement should map to at least one "proposed" change. Create a new "confirm" bullet only when the resume contains transferable evidence for it. For a true gap, use an empty proposed value and explain what is missing in gapNote.
+6. matchScore MUST reflect the score AFTER all evidence-backed changes are accepted — not the current score. Calculate it from the job's key requirements, and never inflate it to 90 when true gaps remain.
 
 RESUME:
 Name: ${resume.contact?.name ?? ""}
