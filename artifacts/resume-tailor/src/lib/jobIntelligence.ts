@@ -128,6 +128,24 @@ export function acceptedRows(rows: DiffChange[]) {
   return rows.filter(row => row.status === "rewritten" && row.confirmed === true);
 }
 
+/**
+ * Resolve an entire review in one action without allowing unsupported claims
+ * into the generated resume. Verified keyword changes and rewrites grounded in
+ * existing evidence are accepted; true gaps and empty proposals are kept out.
+ */
+export function applyAllEvidenceBackedChanges(rows: DiffChange[]): DiffChange[] {
+  return rows.map(row => {
+    if (row.status === "kept" || row.confirmed === true) return row;
+    const proposal = (row.customText ?? row.proposed ?? "").trim();
+    const canApply = proposal.length > 0 && evidenceLevel(row) !== "missing";
+    return {
+      ...row,
+      confirmed: true,
+      status: canApply ? "rewritten" : "kept",
+    };
+  });
+}
+
 export function changeAtsImpact(change: DiffChange, job: JobResult | undefined) {
   const proposed = normalize(change.customText ?? change.proposed);
   const original = normalize(change.original);
